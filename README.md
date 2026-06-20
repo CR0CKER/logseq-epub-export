@@ -1,0 +1,83 @@
+# Logseq EPUB Export
+
+Export a whole Logseq graph to a single, navigable **EPUB** so you can read and
+explore it like a wiki on an e-reader — built for **KOReader** on e-ink devices
+(Boox, Kobo, Kindle, …) where Markdown files render as plain text and
+`[[wikilinks]]` aren't tappable.
+
+One click on the toolbar icon builds an EPUB of the **currently selected graph**
+with:
+
+- **Tap-to-navigate `[[wikilinks]]`** — resolved to internal EPUB links (and a
+  muted style for links to pages that don't exist).
+- **`#tags` as browsable index chapters** — each tag lists its member pages.
+- **"Linked References"** on every page — the backlinks, as working links.
+- **`{{query (property type "X")}}` expansion** — index/MoC pages like
+  `[[People]]` become real lists instead of dead macros.
+- **A Home/Contents chapter** plus a grouped TOC (Pages / Tags / Journals) that
+  KOReader reads natively, along with full-text search, dictionary and a
+  tap-history back button.
+
+## How it works
+
+A plugin reads Logseq's database (not the raw Markdown), so block trees,
+properties, aliases and tags come pre-resolved. Each page becomes one XHTML
+chapter; everything is packaged into a valid EPUB 3 (with an NCX fallback) using
+[JSZip](https://stuk.github.io/jszip/).
+
+## Install (dev / unpacked)
+
+```sh
+npm install
+npm run build        # outputs ./dist
+```
+
+In Logseq: **Settings → Advanced → Developer mode**, then **Plugins → Load
+unpacked plugin** → select this folder.
+
+## Usage
+
+- Click the **book-download icon** in the toolbar to export the active graph
+  using your saved settings (genuinely one click).
+- Or run **`EPUB Export: export current graph now`** from the command palette.
+- **`EPUB Export: open panel / choose folder`** opens a small panel to pick a
+  custom export folder and watch progress.
+
+## Settings
+
+| Setting | Options | Notes |
+|---|---|---|
+| **Save destination** | `graph-assets` (default) · `custom-folder` | Graph-assets writes into `assets/storages/<plugin-id>/`. If the graph syncs via **Syncthing**, the EPUB reaches your e-reader automatically. Custom-folder writes to a folder you pick once per graph (dev/unpacked install only). |
+| **On re-export** | `overwrite` (default) · `versioned` | Overwrite the same file, or keep history with a timestamped filename (`<graph> YYYY-MM-DD-HHmm.epub`). |
+| **Include journal pages** | on/off | Adds journals as their own TOC section. |
+| **Output filename** | string | Blank = use the graph name. |
+
+The custom export folder is remembered **per graph** (stored in IndexedDB, since
+File System Access handles can't live in plugin settings).
+
+## Delivering to the Boox / KOReader
+
+Default flow: keep **Save destination = graph-assets**, let **Syncthing** carry
+the graph folder to the device, and open the `.epub` from
+`assets/storages/logseq-epub-export/` in KOReader.
+
+## Limitations (v1)
+
+- **Read-only snapshot** — re-run to refresh after editing the graph.
+- **Images are shown as labelled placeholders**, not embedded (graph asset files
+  aren't readable from the plugin sandbox).
+- Block references / embeds (`((…))`, `{{embed …}}`) are not resolved.
+- Only `(property <key> "<value>")` queries are expanded; other `{{query}}`
+  forms render as a muted note.
+
+## Development
+
+```sh
+npm run typecheck    # tsc --noEmit
+npm run test         # bundles + runs the render/EPUB smoke test
+npm run build        # production build to ./dist
+```
+
+## License
+
+MIT © CR0CKER
