@@ -65,6 +65,19 @@ Default flow: keep **Save destination = graph-assets**, let **Syncthing** carry
 the graph folder to the device, and open the `.epub` from
 `assets/storages/logseq-epub-export/` in KOReader.
 
+### Cover not updating in KOReader?
+
+KOReader caches each book's cover **by file path** on the device. If you
+re-export over the same filename, KOReader can keep showing the old (or missing)
+thumbnail. To force a refresh: in the file browser **long-press the book →
+Book information → refresh**, or **Settings → … → clear the cover/book-info
+cache**. The cover *inside* the book always reflects the latest export — only the
+browser thumbnail is cached. Using **versioned** output (a new filename each
+time) side-steps the cache entirely.
+
+The cover is written as an **opaque JPEG**, the format crengine (KOReader's EPUB
+engine) renders most reliably.
+
 ## Limitations (v1)
 
 - **Read-only snapshot** — re-run to refresh after editing the graph.

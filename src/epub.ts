@@ -86,7 +86,10 @@ function contentOpf(input: EpubInput, id: string): string {
   </manifest>
   <spine toc="ncx">
     ${spine(input)}
-  </spine>
+  </spine>${input.cover ? `
+  <guide>
+    <reference type="cover" title="Cover" href="cover.xhtml" />
+  </guide>` : ''}
 </package>`
 }
 

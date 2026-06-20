@@ -105,6 +105,26 @@ export interface CoverImage {
   fileName: string
 }
 
+/** Encode a canvas as opaque JPEG bytes, with a toDataURL fallback for
+ *  environments where toBlob is unavailable or returns null. JPEG (no alpha)
+ *  is the most reliably-rendered cover format for crengine/KOReader. */
+async function encodeJpeg(canvas: HTMLCanvasElement): Promise<ArrayBuffer | null> {
+  const blob = await new Promise<Blob | null>((resolve) => {
+    try { canvas.toBlob((b) => resolve(b), 'image/jpeg', 0.9) } catch { resolve(null) }
+  })
+  if (blob) return blob.arrayBuffer()
+  try {
+    const dataUrl = canvas.toDataURL('image/jpeg', 0.9)
+    const b64 = dataUrl.split(',')[1]
+    const bin = atob(b64)
+    const bytes = new Uint8Array(bin.length)
+    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i)
+    return bytes.buffer
+  } catch {
+    return null
+  }
+}
+
 export async function buildCover(title: string): Promise<CoverImage | null> {
   let canvas: HTMLCanvasElement
   try {
@@ -116,6 +136,8 @@ export async function buildCover(title: string): Promise<CoverImage | null> {
   canvas.height = H
   const ctx = canvas.getContext('2d')
   if (!ctx) return null
+  // Let any web fonts finish loading so title text isn't drawn in a fallback.
+  try { await (document as any).fonts?.ready } catch { /* ignore */ }
 
   // Background gradient.
   const grad = ctx.createLinearGradient(0, 0, 0, H)
@@ -180,10 +202,7 @@ export async function buildCover(title: string): Promise<CoverImage | null> {
   ctx.font = '500 40px system-ui, -apple-system, "Segoe UI", Roboto, sans-serif'
   ctx.fillText('Exported to EPUB for reading offline', W / 2, H - 220)
 
-  const blob = await new Promise<Blob | null>((resolve) =>
-    canvas.toBlob((b) => resolve(b), 'image/png'),
-  )
-  if (!blob) return null
-  const bytes = await blob.arrayBuffer()
-  return { bytes, mediaType: 'image/png', fileName: 'cover.png' }
+  const bytes = await encodeJpeg(canvas)
+  if (!bytes) return null
+  return { bytes, mediaType: 'image/jpeg', fileName: 'cover.jpg' }
 }
