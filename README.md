@@ -65,18 +65,33 @@ Default flow: keep **Save destination = graph-assets**, let **Syncthing** carry
 the graph folder to the device, and open the `.epub` from
 `assets/storages/logseq-epub-export/` in KOReader.
 
+## Cover
+
+Each export auto-generates a clean, Logseq-inspired cover (a connected-nodes
+graph glyph + teal accent) titled with the graph name. It's drawn on a `<canvas>`
+in the plugin and embedded in the EPUB. A few things worth knowing:
+
+- **Designed for e-ink.** Light background, near-black title and glyph, deep-teal
+  accent that maps to a clean mid-gray on grayscale. Dark/flooded covers cause
+  heavy ink, low contrast, and ghosting on reflective e-ink screens.
+- **Written as an opaque JPEG.** This is the format crengine (KOReader's EPUB
+  engine) renders most reliably — a structurally valid EPUB with an *RGBA PNG*
+  cover may silently fail to display, while opaque JPEG works.
+- **Maximum reader compatibility.** The cover is declared three ways so any
+  reader finds it: EPUB3 `properties="cover-image"`, EPUB2
+  `<meta name="cover">`, a full-page `cover.xhtml` as the first spine item, and
+  an EPUB2 `<guide>` reference (used by Calibre/ADE; crengine ignores it). The
+  EPUB title (`dc:title`) is the graph name, so it lists correctly on the device.
+
 ### Cover not updating in KOReader?
 
 KOReader caches each book's cover **by file path** on the device. If you
 re-export over the same filename, KOReader can keep showing the old (or missing)
 thumbnail. To force a refresh: in the file browser **long-press the book →
 Book information → refresh**, or **Settings → … → clear the cover/book-info
-cache**. The cover *inside* the book always reflects the latest export — only the
-browser thumbnail is cached. Using **versioned** output (a new filename each
-time) side-steps the cache entirely.
-
-The cover is written as an **opaque JPEG**, the format crengine (KOReader's EPUB
-engine) renders most reliably.
+cache**. The cover *inside* the book always reflects the latest export (it's the
+first page) — only the browser thumbnail is cached. Using **versioned** output (a
+new filename each time) side-steps the cache entirely.
 
 ## Limitations (v1)
 
@@ -97,7 +112,10 @@ npm run preview:cover  # build docs/cover-preview.js, then open docs/cover-previ
 ```
 
 `docs/cover-preview.html` renders the generated cover in a plain browser so you
-can iterate on the artwork without loading the plugin into Logseq.
+can iterate on the artwork without loading the plugin into Logseq. (`cover.ts`
+uses the browser `<canvas>`/`toBlob` API, so the cover can't be rendered under
+plain Node — preview it in a real browser, or screenshot `tests/cover-shot.ts`
+headlessly.)
 
 ## License
 
