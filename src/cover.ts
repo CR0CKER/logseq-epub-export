@@ -13,7 +13,7 @@ const H = 2400
 // Light palette tuned for e-ink: near-white background, near-black ink, and a
 // deep-teal accent that reads as a clean mid-gray on grayscale displays.
 const BG_TOP = '#ffffff'
-const BG_BOTTOM = '#e9edf1'
+const BG_BOTTOM = '#fafbfc'
 const TEAL = '#0d8c80'   // deep teal accent
 const LINE = '#9aa7b4'   // faint graph edges
 const INK = '#0f1720'    // near-black text & hub
@@ -140,7 +140,8 @@ export async function buildCover(title: string): Promise<CoverImage | null> {
   // Let any web fonts finish loading so title text isn't drawn in a fallback.
   try { await (document as any).fonts?.ready } catch { /* ignore */ }
 
-  // Background gradient.
+  // Flat background — a whisper of off-white so it isn't clinically flat, but
+  // no visible grey band at the bottom.
   const grad = ctx.createLinearGradient(0, 0, 0, H)
   grad.addColorStop(0, BG_TOP)
   grad.addColorStop(1, BG_BOTTOM)
@@ -158,10 +159,6 @@ export async function buildCover(title: string): Promise<CoverImage | null> {
     ctx.fill()
   }
   ctx.globalAlpha = 1
-
-  // Top accent rule.
-  ctx.fillStyle = TEAL
-  ctx.fillRect(160, 200, 180, 12)
 
   // Badge (squircle) with the graph glyph.
   const badge = 560
