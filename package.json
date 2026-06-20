@@ -26,7 +26,8 @@
     "dev": "vite",
     "build": "vite build",
     "typecheck": "tsc --noEmit",
-    "test": "esbuild tests/smoke.ts --bundle --platform=node --format=esm --outfile=node_modules/.cache/smoke.mjs && node node_modules/.cache/smoke.mjs"
+    "test": "esbuild tests/smoke.ts --bundle --platform=node --format=esm --outfile=node_modules/.cache/smoke.mjs && node node_modules/.cache/smoke.mjs",
+    "preview:cover": "esbuild tests/cover-preview.ts --bundle --outfile=docs/cover-preview.js"
   },
   "license": "MIT",
   "dependencies": {

@@ -2,3 +2,4 @@ node_modules
 dist
 *.epub
 .DS_Store
+docs/cover-preview.js

@@ -1,4 +1,5 @@
 import { collectGraph } from './graph'
+import { buildCover } from './cover'
 import { buildEpub, NavGroup } from './epub'
 import {
   Chapter,
@@ -46,8 +47,16 @@ export async function exportGraphToEpub(
     { label: 'Journals', items: toNav(journalChapters) },
   ]
 
+  onProgress?.('Generating cover…')
+  let cover = null
+  try {
+    cover = await buildCover(model.graphName)
+  } catch (e) {
+    console.warn('logseq-epub-export: cover generation failed; shipping without one', e)
+  }
+
   onProgress?.('Packaging EPUB…')
-  const bytes = await buildEpub({ title: model.graphName, chapters, nav })
+  const bytes = await buildEpub({ title: model.graphName, chapters, nav, cover })
 
   return {
     graphName: model.graphName,

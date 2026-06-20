@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>EPUB cover preview</title>
+  <style>
+    body { font-family: system-ui, sans-serif; margin: 24px; background: #f4f4f5; }
+    .bar { display: flex; gap: 8px; margin-bottom: 16px; }
+    input { flex: 1; padding: 8px 10px; font-size: 14px; }
+    button { padding: 8px 14px; font-size: 14px; cursor: pointer; }
+    #out { display: flex; justify-content: center; }
+  </style>
+</head>
+<body>
+  <div class="bar">
+    <input id="title" value="Change Management" placeholder="Graph name…" />
+    <button id="go">Render</button>
+  </div>
+  <div id="out"></div>
+  <script src="./cover-preview.js"></script>
+</body>
+</html>

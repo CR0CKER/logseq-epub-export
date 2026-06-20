@@ -6,12 +6,20 @@ export interface NavGroup {
   items: { label: string; href: string }[]
 }
 
+export interface CoverImage {
+  bytes: ArrayBuffer
+  mediaType: string
+  fileName: string
+}
+
 export interface EpubInput {
   title: string
   /** Spine order; the first chapter is the landing page. */
   chapters: Chapter[]
   /** Grouped navigation for the TOC (Pages / Tags / Journals …). */
   nav: NavGroup[]
+  /** Optional cover image (PNG/JPEG); shown as the first spine page. */
+  cover?: CoverImage | null
 }
 
 const OPF_DIR = 'OEBPS'
@@ -28,22 +36,42 @@ function uuid(): string {
   }
 }
 
-function manifest(chapters: Chapter[]): string {
-  const items = chapters
+function manifest(input: EpubInput): string {
+  const items = input.chapters
     .map((c) => `<item id="${c.slug}" href="${c.slug}.xhtml" media-type="application/xhtml+xml" />`)
     .join('\n    ')
+  const cover = input.cover
+    ? `<item id="cover-image" href="${input.cover.fileName}" media-type="${input.cover.mediaType}" properties="cover-image" />
+    <item id="cover" href="cover.xhtml" media-type="application/xhtml+xml" />\n    `
+    : ''
   return `<item id="nav" href="nav.xhtml" media-type="application/xhtml+xml" properties="nav" />
     <item id="ncx" href="toc.ncx" media-type="application/x-dtbncx+xml" />
     <item id="css" href="style.css" media-type="text/css" />
-    ${items}`
+    ${cover}${items}`
 }
 
-function spine(chapters: Chapter[]): string {
-  return chapters.map((c) => `<itemref idref="${c.slug}" />`).join('\n    ')
+function spine(input: EpubInput): string {
+  const cover = input.cover ? `<itemref idref="cover" linear="yes" />\n    ` : ''
+  return cover + input.chapters.map((c) => `<itemref idref="${c.slug}" />`).join('\n    ')
+}
+
+function coverXhtml(input: EpubInput): string {
+  return `<?xml version="1.0" encoding="utf-8"?>
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="en" lang="en">
+<head>
+<meta charset="utf-8" />
+<title>${escapeHtml(input.title)}</title>
+<style>html,body{margin:0;padding:0;height:100%;text-align:center;background:#0b1220}
+img{max-width:100%;max-height:100vh;object-fit:contain}</style>
+</head>
+<body><img src="${input.cover!.fileName}" alt="${escapeHtml(input.title)}" /></body>
+</html>`
 }
 
 function contentOpf(input: EpubInput, id: string): string {
   const date = new Date().toISOString().replace(/\.\d+Z$/, 'Z')
+  const coverMeta = input.cover ? `\n    <meta name="cover" content="cover-image" />` : ''
   return `<?xml version="1.0" encoding="utf-8"?>
 <package xmlns="http://www.idpf.org/2007/opf" version="3.0" unique-identifier="bookid">
   <metadata xmlns:dc="http://purl.org/dc/elements/1.1/">
@@ -51,13 +79,13 @@ function contentOpf(input: EpubInput, id: string): string {
     <dc:title>${escapeHtml(input.title)}</dc:title>
     <dc:language>en</dc:language>
     <dc:creator>Logseq EPUB Export</dc:creator>
-    <meta property="dcterms:modified">${date}</meta>
+    <meta property="dcterms:modified">${date}</meta>${coverMeta}
   </metadata>
   <manifest>
-    ${manifest(input.chapters)}
+    ${manifest(input)}
   </manifest>
   <spine toc="ncx">
-    ${spine(input.chapters)}
+    ${spine(input)}
   </spine>
 </package>`
 }
@@ -141,6 +169,10 @@ export async function buildEpub(input: EpubInput): Promise<ArrayBuffer> {
   oebps.file('nav.xhtml', navXhtml(input))
   oebps.file('toc.ncx', tocNcx(input, id))
   oebps.file('style.css', STYLE_CSS)
+  if (input.cover) {
+    oebps.file(input.cover.fileName, input.cover.bytes)
+    oebps.file('cover.xhtml', coverXhtml(input))
+  }
   for (const c of input.chapters) oebps.file(`${c.slug}.xhtml`, c.xhtml)
 
   return zip.generateAsync({

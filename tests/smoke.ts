@@ -77,9 +77,15 @@ assert(home.xhtml.includes('href="adkar.xhtml"') && home.xhtml.includes('href="t
 
 console.log('Packaging EPUB…')
 const chapters = [home, adkarCh, kotter && renderPageChapter(kotter, model), tagCh]
+// 1x1 PNG so we can exercise the cover plumbing without a canvas.
+const pngBytes = Buffer.from(
+  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
+  'base64',
+)
 const bytes = await buildEpub({
   title: 'Test Graph',
   chapters,
+  cover: { bytes: pngBytes.buffer.slice(pngBytes.byteOffset, pngBytes.byteOffset + pngBytes.byteLength), mediaType: 'image/png', fileName: 'cover.png' },
   nav: [
     { label: 'Home', items: [{ label: 'Home', href: 'index.xhtml' }] },
     { label: 'Pages', items: [{ label: 'ADKAR', href: 'adkar.xhtml' }, { label: 'Kotter 8-Step', href: 'kotter-8-step.xhtml' }] },
@@ -97,7 +103,16 @@ assert(name === 'mimetype', 'first zip entry is "mimetype"')
 assert(method === 0, 'mimetype is stored (uncompressed)')
 const content = buf.toString('latin1')
 assert(content.includes('application/epub+zip'), 'mimetype content correct')
-assert(content.includes('content.opf') && content.includes('toc.ncx') && content.includes('nav.xhtml'), 'opf/ncx/nav present')
+
+// Decompress and inspect the real package document.
+const back = await (await import('jszip')).default.loadAsync(buf)
+const opf = await back.file('OEBPS/content.opf')!.async('string')
+assert(!!back.file('OEBPS/toc.ncx') && !!back.file('OEBPS/nav.xhtml'), 'opf/ncx/nav present')
+assert(!!back.file('OEBPS/cover.png') && !!back.file('OEBPS/cover.xhtml'), 'cover files present in zip')
+assert(opf.includes('properties="cover-image"') && opf.includes('cover.png'), 'cover image in manifest')
+assert(opf.includes('<meta name="cover" content="cover-image"'), 'EPUB2 cover meta present')
+assert(opf.includes('<itemref idref="cover"'), 'cover is first spine item')
+assert(opf.includes('<dc:title>Test Graph</dc:title>'), 'title is the graph name')
 
 console.log(`\nWrote /tmp/logseq-epub-export-smoke.epub (${buf.length} bytes)`)
 if (failures > 0) { console.error(`\n${failures} assertion(s) FAILED`); process.exit(1) }

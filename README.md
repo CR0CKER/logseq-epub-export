@@ -17,6 +17,10 @@ with:
 - **A Home/Contents chapter** plus a grouped TOC (Pages / Tags / Journals) that
   KOReader reads natively, along with full-text search, dictionary and a
   tap-history back button.
+- **An auto-generated cover** — a clean, modern, Logseq-inspired graphic
+  (connected-nodes graph motif + teal accent) titled with the graph name. The
+  EPUB title (`dc:title`) is the graph name too, so it lists correctly on the
+  device.
 
 ## How it works
 
@@ -73,10 +77,14 @@ the graph folder to the device, and open the `.epub` from
 ## Development
 
 ```sh
-npm run typecheck    # tsc --noEmit
-npm run test         # bundles + runs the render/EPUB smoke test
-npm run build        # production build to ./dist
+npm run typecheck      # tsc --noEmit
+npm run test           # bundles + runs the render/EPUB smoke test
+npm run build          # production build to ./dist
+npm run preview:cover  # build docs/cover-preview.js, then open docs/cover-preview.html
 ```
+
+`docs/cover-preview.html` renders the generated cover in a plain browser so you
+can iterate on the artwork without loading the plugin into Logseq.
 
 ## License
 
