@@ -10,14 +10,15 @@
 const W = 1600
 const H = 2400
 
-// Logseq-inspired palette: deep slate background, teal accent, off-white text.
-const BG_TOP = '#0b1220'
-const BG_BOTTOM = '#10202b'
-const TEAL = '#2dd4bf'
-const TEAL_DIM = '#0d9488'
-const INK = '#f8fafc'
-const MUTED = '#7c8b99'
-const BADGE = '#0e1a22'
+// Light palette tuned for e-ink: near-white background, near-black ink, and a
+// deep-teal accent that reads as a clean mid-gray on grayscale displays.
+const BG_TOP = '#ffffff'
+const BG_BOTTOM = '#e9edf1'
+const TEAL = '#0d8c80'   // deep teal accent
+const LINE = '#9aa7b4'   // faint graph edges
+const INK = '#0f1720'    // near-black text & hub
+const MUTED = '#6b7785'
+const BADGE = '#f6f8fa'  // light badge fill
 
 function roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number): void {
   if (typeof (ctx as any).roundRect === 'function') {
@@ -44,9 +45,9 @@ function drawGraphGlyph(ctx: CanvasRenderingContext2D, cx: number, cy: number, r
   }
 
   // Connecting lines (hub → nodes, plus the outer ring).
-  ctx.strokeStyle = TEAL_DIM
+  ctx.strokeStyle = LINE
   ctx.lineWidth = 8
-  ctx.globalAlpha = 0.85
+  ctx.globalAlpha = 0.95
   for (const [x, y] of outer) {
     ctx.beginPath()
     ctx.moveTo(cx, cy)
@@ -59,21 +60,21 @@ function drawGraphGlyph(ctx: CanvasRenderingContext2D, cx: number, cy: number, r
   ctx.stroke()
   ctx.globalAlpha = 1
 
-  // Outer nodes.
+  // Outer nodes (dark for strong e-ink contrast).
   for (const [x, y] of outer) {
     ctx.beginPath()
-    ctx.fillStyle = TEAL
+    ctx.fillStyle = INK
     ctx.arc(x, y, 26, 0, Math.PI * 2)
     ctx.fill()
   }
-  // Hub node.
+  // Hub node: dark disc with a teal core.
   ctx.beginPath()
   ctx.fillStyle = INK
   ctx.arc(cx, cy, 40, 0, Math.PI * 2)
   ctx.fill()
   ctx.beginPath()
   ctx.fillStyle = TEAL
-  ctx.arc(cx, cy, 22, 0, Math.PI * 2)
+  ctx.arc(cx, cy, 20, 0, Math.PI * 2)
   ctx.fill()
 }
 
@@ -147,8 +148,8 @@ export async function buildCover(title: string): Promise<CoverImage | null> {
   ctx.fillRect(0, 0, W, H)
 
   // Faint scattered nodes in the background for texture.
-  ctx.fillStyle = TEAL
-  ctx.globalAlpha = 0.06
+  ctx.fillStyle = MUTED
+  ctx.globalAlpha = 0.08
   for (let i = 0; i < 40; i++) {
     const x = (Math.sin(i * 12.9898) * 43758.5453) % 1
     const y = (Math.sin(i * 78.233) * 12543.123) % 1
@@ -167,15 +168,15 @@ export async function buildCover(title: string): Promise<CoverImage | null> {
   const bx = (W - badge) / 2
   const by = 360
   ctx.save()
-  ctx.shadowColor = 'rgba(0,0,0,0.45)'
-  ctx.shadowBlur = 60
-  ctx.shadowOffsetY = 24
+  ctx.shadowColor = 'rgba(15,23,32,0.18)'
+  ctx.shadowBlur = 50
+  ctx.shadowOffsetY = 18
   roundRect(ctx, bx, by, badge, badge, 130)
   ctx.fillStyle = BADGE
   ctx.fill()
   ctx.restore()
   roundRect(ctx, bx, by, badge, badge, 130)
-  ctx.strokeStyle = TEAL_DIM
+  ctx.strokeStyle = TEAL
   ctx.lineWidth = 6
   ctx.stroke()
   drawGraphGlyph(ctx, W / 2, by + badge / 2, 150)

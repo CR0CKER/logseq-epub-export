@@ -62,7 +62,7 @@ function coverXhtml(input: EpubInput): string {
 <head>
 <meta charset="utf-8" />
 <title>${escapeHtml(input.title)}</title>
-<style>html,body{margin:0;padding:0;height:100%;text-align:center;background:#0b1220}
+<style>html,body{margin:0;padding:0;height:100%;text-align:center;background:#ffffff}
 img{max-width:100%;max-height:100vh;object-fit:contain}</style>
 </head>
 <body><img src="${input.cover!.fileName}" alt="${escapeHtml(input.title)}" /></body>
