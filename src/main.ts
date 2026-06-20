@@ -3,6 +3,7 @@ import { SettingSchemaDesc } from '@logseq/libs/dist/LSPlugin'
 import { del as idbDel, get as idbGet, set as idbSet } from 'idb-keyval'
 import { exportGraphToEpub } from './export'
 import { openPanel, Panel } from './panel'
+import { watchTheme } from './theme'
 import pkg from '../package.json'
 
 const SETTINGS: SettingSchemaDesc[] = [
@@ -179,7 +180,7 @@ async function openPanelFor(graph: { name: string; url: string }): Promise<void>
     const handle = await idbGet(dirKey(graph.url))
     folderName = handle?.name ?? null
   }
-  panel = openPanel({
+  panel = await openPanel({
     graphName: graph.name,
     version: pkg.version,
     destinationMode,
@@ -198,6 +199,7 @@ async function openPanel_(): Promise<void> {
 function bootstrap() {
   console.log('logseq-epub-export: loaded (v' + pkg.version + ')')
   logseq.useSettingsSchema(SETTINGS)
+  watchTheme()
 
   logseq.provideModel({
     runExport() { void runExport() },

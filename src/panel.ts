@@ -1,4 +1,5 @@
 import '@logseq/libs'
+import { applyTheme } from './theme'
 
 export interface Panel {
   log: (msg: string) => void
@@ -39,7 +40,11 @@ const STYLE = `
 .ee-x { cursor: pointer; background: none; border: none; color: inherit; font-size: 13px; }
 `
 
-export function openPanel(h: PanelHandlers): Panel {
+export async function openPanel(h: PanelHandlers): Promise<Panel> {
+  // Pull Logseq's live theme variables into this iframe before painting, so
+  // the panel matches the user's graph (light/dark/themed) on first render.
+  await applyTheme()
+
   const app = document.getElementById('app')!
   const showFolder = h.destinationMode === 'custom-folder'
   app.innerHTML = `
