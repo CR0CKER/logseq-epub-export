@@ -307,7 +307,6 @@ async function openPanelFor(graph: { name: string; url: string }, { pick = false
   const stored = custom && rememberFolder() ? await idbGet(dirKey(graph.url)) : null
   panel = await openPanel({
     graphName: graph.name,
-    version: pkg.version,
     mode: pick ? 'pick' : 'export',
     folder: !custom ? null : rememberFolder() ? { name: stored?.name ?? null } : { name: null, askEachTime: true },
     onPickAndExport: async () => {

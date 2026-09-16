@@ -483,6 +483,23 @@ export const cases = [
       assert.deepEqual(await pickerCalls(cdp), [true], '"Export now" did not open the picker with user activation')
       assert.equal(await storedFolder(cdp, ctx.graph.url), 'Kobo books', 'the chosen folder was not remembered')
 
+      // The panel names the folder under its title, above "Export now", and
+      // shows no version number.
+      const layout = JSON.parse(await cdp.evaluate(`(() => {
+        const d = ${FRAME}.contentDocument
+        const folder = d.querySelector('#ee-folder'), exportBtn = d.querySelector('#ee-export'), title = d.querySelector('.ee-card h1')
+        return JSON.stringify({
+          folder: folder?.textContent,
+          afterTitle: Boolean(folder && (title.compareDocumentPosition(folder) & Node.DOCUMENT_POSITION_FOLLOWING)),
+          beforeExport: Boolean(folder && (folder.compareDocumentPosition(exportBtn) & Node.DOCUMENT_POSITION_FOLLOWING)),
+          card: d.querySelector('.ee-card').textContent,
+        })
+      })()`))
+      assert.equal(layout.folder, 'Folder: Kobo books')
+      assert.ok(layout.afterTitle && layout.beforeExport, 'the folder line is not between the title and "Export now"')
+      assert.doesNotMatch(layout.card, /Builds a navigable EPUB/, 'the old subtitle is still shown')
+      assert.doesNotMatch(layout.card, /\bv\d+\.\d+\.\d+/, 'the panel still shows a version number')
+
       since = first.lastModified
       await exportFromToolbar(cdp)
       await waitForFolderExport(cdp, 'Kobo books', book, since)

@@ -9,7 +9,6 @@ export interface Panel {
 
 export interface PanelHandlers {
   graphName: string
-  version: string
   /**
    * 'export': the usual panel. 'pick': an export needs a folder but could not
    * open the picker itself, so the main button chooses one and exports.
@@ -39,11 +38,10 @@ button { font: inherit; }
   border-radius: 6px; padding: 7px 12px; font-size: 13px; }
 .ee-btn.primary { background: var(--ls-active-primary-color, #2563eb); color: #fff; border-color: transparent; }
 .ee-btn:disabled { opacity: .5; cursor: default; }
-.ee-folder { font-size: 12px; color: var(--ls-secondary-text-color, #777); }
 .ee-log { margin-top: 12px; font-family: monospace; font-size: 11px; white-space: pre-wrap;
   max-height: 160px; overflow: auto; background: var(--ls-secondary-background-color, #f0f0f0);
   border-radius: 6px; padding: 8px; min-height: 40px; }
-.ee-foot { display: flex; justify-content: space-between; align-items: center; margin-top: 12px;
+.ee-foot { display: flex; justify-content: flex-end; align-items: center; margin-top: 12px;
   font-size: 11px; color: var(--ls-secondary-text-color, #777); }
 .ee-x { cursor: pointer; background: none; border: none; color: inherit; font-size: 13px; }
 `
@@ -62,17 +60,15 @@ export async function openPanel(h: PanelHandlers): Promise<Panel> {
     <div class="ee-overlay" id="ee-overlay">
       <div class="ee-card">
         <h1>Export “${escape(h.graphName)}” to EPUB</h1>
-        <p class="ee-sub">Builds a navigable EPUB of the current graph for e-readers.</p>
+        ${h.folder && !pick ? `<p class="ee-sub" id="ee-folder">${folderLine(h.folder.name)}</p>` : ''}
         <div class="ee-row">
           ${pick
             ? `<button class="ee-btn primary" id="ee-pick-export">Choose folder and export…</button>`
             : `<button class="ee-btn primary" id="ee-export">Export now</button>`}
           ${!pick && h.folder && !h.folder.askEachTime ? `<button class="ee-btn" id="ee-folder-btn">Change folder…</button>` : ''}
         </div>
-        ${h.folder && !pick ? `<div class="ee-folder" id="ee-folder">${folderLine(h.folder.name)}</div>` : ''}
         <div class="ee-log" id="ee-log"></div>
         <div class="ee-foot">
-          <span>v${escape(h.version)}</span>
           <button class="ee-x" id="ee-close">Close</button>
         </div>
       </div>
