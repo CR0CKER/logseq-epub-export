@@ -1,6 +1,7 @@
 import JSZip from 'jszip'
 import { Chapter, escapeHtml, STYLE_CSS } from './render'
 import type { EmbeddedImage } from './assets'
+import { EPUB_CREATOR } from './filename'
 
 export interface NavGroup {
   label: string
@@ -84,7 +85,7 @@ function contentOpf(input: EpubInput, id: string): string {
     <dc:identifier id="bookid">urn:uuid:${id}</dc:identifier>
     <dc:title>${escapeHtml(input.title)}</dc:title>
     <dc:language>en</dc:language>
-    <dc:creator>Logseq EPUB Export</dc:creator>
+    <dc:creator>${escapeHtml(EPUB_CREATOR)}</dc:creator>
     <meta property="dcterms:modified">${date}</meta>${coverMeta}
   </metadata>
   <manifest>

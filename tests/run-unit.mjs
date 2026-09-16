@@ -7,7 +7,7 @@ import { build } from 'esbuild'
 import { execFileSync } from 'node:child_process'
 import { mkdirSync } from 'node:fs'
 
-const TESTS = ['tests/entities.ts', 'tests/assets.ts', 'tests/smoke.ts']
+const TESTS = ['tests/entities.ts', 'tests/assets.ts', 'tests/filename.ts', 'tests/smoke.ts']
 const outDir = 'node_modules/.cache/unit'
 mkdirSync(outDir, { recursive: true })
 

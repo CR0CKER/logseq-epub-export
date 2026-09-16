@@ -5,6 +5,7 @@ import { exportGraphToEpub } from './export'
 import { openPanel, Panel } from './panel'
 import { watchTheme } from './theme'
 import { graphDisplayName } from './entities'
+import { epubFileName } from './filename'
 import pkg from '../package.json'
 
 /**
@@ -57,7 +58,9 @@ const settingsSchema = (folderName: string | null): SettingSchemaDesc[] => [
   {
     key: 'filenameBase',
     title: 'Output filename (optional)',
-    description: 'Base name without extension. Leave blank to use the graph name.',
+    description:
+      'Base name without extension. Leave blank for Calibre\'s naming, ' +
+      '"<graph name> - Logseq EPUB Export", which matches a copy imported into Calibre.',
     type: 'string',
     default: '',
   },
@@ -79,19 +82,6 @@ async function currentGraph(): Promise<{ name: string; url: string } | null> {
     console.warn('logseq-epub-export: getCurrentGraph failed', e)
     return null
   }
-}
-
-function timestamp(): string {
-  const d = new Date()
-  const p = (n: number) => String(n).padStart(2, '0')
-  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}-${p(d.getHours())}${p(d.getMinutes())}`
-}
-
-function fileName(graphName: string): string {
-  const base = ((logseq.settings?.filenameBase as string) || '').trim() || graphName
-  const safe = base.replace(/[\\/:*?"<>|]/g, '_').trim() || 'graph'
-  const mode = (logseq.settings?.outputMode as string) || 'overwrite'
-  return mode === 'versioned' ? `${safe} ${timestamp()}.epub` : `${safe}.epub`
 }
 
 function log(msg: string) {
@@ -257,7 +247,11 @@ async function runExport(chosen?: any): Promise<void> {
 
   busy = true
   panel?.setBusy(true)
-  const name = fileName(graph.name)
+  const name = epubFileName({
+    graphName: graph.name,
+    filenameBase: logseq.settings?.filenameBase as string | undefined,
+    versioned: logseq.settings?.outputMode === 'versioned',
+  })
   log(`Exporting “${graph.name}” → ${name}`)
   // A toolbar export has no panel; without this a large graph looks like
   // nothing is happening for a minute.

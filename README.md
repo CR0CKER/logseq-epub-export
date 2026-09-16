@@ -108,9 +108,9 @@ then **Load unpacked plugin** on this folder.
 |---|---|---|
 | **Save destination** | `graph-assets` (default) · `custom-folder` | Graph-assets writes into the graph's `assets/storages/logseq-epub-export/` (see below for where that is). Custom-folder writes to a folder you choose: the first export opens a folder picker. |
 | **Remember export folder** | on (default) / off | On: the folder you choose is kept for each graph, so later exports go straight there. The description names the current graph's folder. Untick it to forget every stored folder; each export then asks for a folder until you tick it again. |
-| **On re-export** | `overwrite` (default) · `versioned` | Overwrite the same file, or keep history with a timestamped filename (`<graph> YYYY-MM-DD-HHmm.epub`). |
+| **On re-export** | `overwrite` (default) · `versioned` | Overwrite the same file, or keep history with a timestamped filename (`<graph> - Logseq EPUB Export YYYY-MM-DD-HHmm.epub`). |
 | **Include journal pages** | on/off | Adds journals as their own TOC section. |
-| **Output filename** | string | Blank = use the graph name. |
+| **Output filename** | string | Blank = Calibre's naming, `<graph> - Logseq EPUB Export.epub` (see below). Anything else is used as the file name. |
 
 ### Choosing and changing the custom folder
 
@@ -131,6 +131,17 @@ both in one click.
 The folder is stored **per graph** in the plugin's IndexedDB (a folder handle
 can't live in plugin settings). This works the same whether the plugin was
 loaded unpacked or installed from a release zip.
+
+The default file name follows **Calibre's library naming**, `Title - Author.epub`:
+the title is the graph name and the author is what the book declares, "Logseq
+EPUB Export". A graph called *Change Management* exports as
+`Change Management - Logseq EPUB Export.epub`, the same name Calibre gives the
+book when you add it to a library. So a direct export and a Calibre copy match,
+and KOReader, which keeps reading progress and highlights per file name, sees one
+book. Like Calibre, long graph names are cut to 42 characters, accented letters
+are spelled in plain ASCII (*Straße* → *Strasse*), and characters that aren't
+allowed in file names become `_`. Unlike Calibre, non-Latin scripts are not
+transliterated (Calibre writes 中文 as *Zhong Wen*; this plugin writes `__`).
 
 Where **graph-assets** lands:
 

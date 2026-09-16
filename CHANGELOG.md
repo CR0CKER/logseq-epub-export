@@ -25,6 +25,10 @@ First public release.
   declared for EPUB 3, EPUB 2 and Calibre/ADE readers.
 - Settings: save to the graph's assets or a custom folder, overwrite or
   versioned filenames, journals on/off, output filename.
+- The default file name follows Calibre's library naming, `<graph> - Logseq EPUB
+  Export.epub`, so a direct export and a Calibre copy of the book share a name
+  (and KOReader's reading history). Titles are cleaned up exactly as Calibre
+  does, checked against Calibre's own output; only non-Latin scripts differ.
 - Custom export folder: the first export opens a folder picker and saves there;
   **Remember export folder** (on by default) keeps it per graph, and unticking it
   forgets the stored folders so each export asks again. The panel offers

@@ -295,12 +295,12 @@ export const cases = [
     },
   },
   {
-    name: "the book is titled with the graph's display name, not its internal id",
+    name: "the book is titled with the graph's display name, and the file named the Calibre way",
     async run({ ctx }) {
       const { files, file } = needBook(ctx)
       const title = files['OEBPS/content.opf'].match(/<dc:title>([\s\S]*?)<\/dc:title>/)?.[1]
       assert.equal(title, ctx.expectedTitle)
-      assert.equal(basename(file), `${ctx.expectedTitle}.epub`)
+      assert.equal(basename(file), `${ctx.expectedTitle} - Logseq EPUB Export.epub`, "the file is not named the Calibre way, Title - Author.epub")
     },
   },
   {
@@ -455,7 +455,7 @@ export const cases = [
   {
     name: 'custom folder: the first export asks for a folder right away, later ones go straight there',
     async run({ cdp, ctx }) {
-      const book = `${ctx.expectedTitle}.epub`
+      const book = `${ctx.expectedTitle} - Logseq EPUB Export.epub`
       await cdp.evaluate(`${PLUGIN}.settings.set('destinationMode', 'custom-folder'); true`)
       await stubFolderPicker(cdp, 'Kobo books')
       assert.equal(await storedFolder(cdp, ctx.graph.url), null, 'a folder is already stored before the first export')
@@ -477,7 +477,7 @@ export const cases = [
   {
     name: 'settings: unticking "Remember export folder" forgets it, and every export then asks',
     async run({ cdp, ctx }) {
-      const book = `${ctx.expectedTitle}.epub`
+      const book = `${ctx.expectedTitle} - Logseq EPUB Export.epub`
       // Both builds render a boolean setting as a checkbox under [data-key]:
       // 2.x a button[role=checkbox], 0.10.x an input[type=checkbox].
       const item = `document.querySelector('[data-key="rememberFolder"]')`
@@ -528,7 +528,7 @@ export const cases = [
   {
     name: 'custom folder: an export without a click behind it offers "Choose folder and export…" in the panel',
     async run({ cdp, ctx }) {
-      const book = `${ctx.expectedTitle}.epub`
+      const book = `${ctx.expectedTitle} - Logseq EPUB Export.epub`
       await stubFolderPicker(cdp, 'Panel books')
       // Earlier clicks leave transient activation behind for a few seconds;
       // wait it out, or the picker would still be allowed.
@@ -556,7 +556,7 @@ export const cases = [
   {
     name: 'custom folder: a picker that returns no folder says so, and a running export shows progress',
     async run({ cdp, ctx }) {
-      const book = `${ctx.expectedTitle}.epub`
+      const book = `${ctx.expectedTitle} - Logseq EPUB Export.epub`
       const hostText = (needle) => `document.body.innerText.includes(${JSON.stringify(needle)})`
       await cdp.evaluate(`${PLUGIN}.settings.set('destinationMode', 'custom-folder'); ${PLUGIN}.settings.set('rememberFolder', false); true`)
 
