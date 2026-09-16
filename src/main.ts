@@ -145,7 +145,19 @@ async function pickFolder(): Promise<any | null> {
   try {
     return await picker({ id: 'logseq-epub-export', mode: 'readwrite' })
   } catch (e: any) {
-    if (e?.name === 'AbortError') return null
+    if (e?.name === 'AbortError') {
+      // Also what Chromium reports when it refuses the chosen folder (the home
+      // folder itself, system folders), so say both, never just go quiet.
+      console.warn('logseq-epub-export: folder picker returned no folder', e?.name, e?.message)
+      await logseq.UI.showMsg(
+        'EPUB export stopped: no folder was chosen. If you did choose one, Logseq ' +
+          'may not allow that folder (for example your home folder or a system ' +
+          'folder); choose a folder inside it instead.',
+        'warning',
+        { timeout: 12000 },
+      )
+      return null
+    }
     if (e?.name === 'SecurityError') throw new NeedsClick(e.message)
     throw e
   }
@@ -172,7 +184,7 @@ async function exportFolder(graph: { name: string; url: string }): Promise<any |
     // the small permission prompt, which the same activation allows.
     if (stored && (await ensureRW(stored))) return stored
     const picked = await pickFolder()
-    if (!picked) { log('Export cancelled: no folder chosen.'); return null }
+    if (!picked) return null
     await adoptFolder(graph.url, picked)
     return picked
   } catch (e) {
@@ -204,6 +216,12 @@ async function runExport(chosen?: any): Promise<void> {
   panel?.setBusy(true)
   const name = fileName(graph.name)
   log(`Exporting “${graph.name}” → ${name}`)
+  // A toolbar export has no panel; without this a large graph looks like
+  // nothing is happening for a minute.
+  let progress: string | null = null
+  try {
+    progress = await logseq.UI.showMsg(`Exporting “${graph.name}” to EPUB…`, 'info', { timeout: 30 * 60 * 1000 })
+  } catch { /* the export itself does not depend on it */ }
   try {
     const result = await exportGraphToEpub((m) => log(m), {
       includeJournals: logseq.settings?.includeJournals !== false,
@@ -223,6 +241,7 @@ async function runExport(chosen?: any): Promise<void> {
   } finally {
     busy = false
     panel?.setBusy(false)
+    if (progress) logseq.UI.closeMsg(progress)
   }
 }
 

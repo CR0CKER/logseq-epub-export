@@ -554,6 +554,45 @@ export const cases = [
     },
   },
   {
+    name: 'custom folder: a picker that returns no folder says so, and a running export shows progress',
+    async run({ cdp, ctx }) {
+      const book = `${ctx.expectedTitle}.epub`
+      const hostText = (needle) => `document.body.innerText.includes(${JSON.stringify(needle)})`
+      await cdp.evaluate(`${PLUGIN}.settings.set('destinationMode', 'custom-folder'); ${PLUGIN}.settings.set('rememberFolder', false); true`)
+
+      // Cancelling, or Chromium refusing the chosen folder: both reject with AbortError.
+      await cdp.evaluate(`(() => {
+        const w = ${FRAME}.contentWindow
+        w.showDirectoryPicker = async () => { throw new w.DOMException('The user aborted a request.', 'AbortError') }
+        return true
+      })()`)
+      await realClick(cdp, TOOLBAR_BUTTON)
+      await waitFor(cdp, hostText('no folder was chosen'), { label: 'a visible message that no folder was chosen', timeoutMs: 15000 })
+
+      // A folder whose first write takes a while, so the export is still running
+      // when the check looks for the progress message.
+      await cdp.evaluate(`(() => {
+        const w = ${FRAME}.contentWindow
+        w.showDirectoryPicker = async () => {
+          const real = await (await w.navigator.storage.getDirectory()).getDirectoryHandle('Slow books', { create: true })
+          return {
+            kind: 'directory', name: real.name,
+            queryPermission: (o) => real.queryPermission(o), requestPermission: (o) => real.requestPermission(o),
+            getFileHandle: async (n, o) => { await new Promise((r) => setTimeout(r, 3000)); return real.getFileHandle(n, o) },
+          }
+        }
+        return true
+      })()`)
+      const since = Date.now() - 1000
+      await realClick(cdp, TOOLBAR_BUTTON)
+      await waitFor(cdp, hostText(`Exporting “${ctx.expectedTitle}” to EPUB…`), { label: 'the progress message while exporting', timeoutMs: 15000, intervalMs: 100 })
+      await waitForFolderExport(cdp, 'Slow books', book, since)
+      await waitFor(cdp, `!${hostText(`Exporting “${ctx.expectedTitle}” to EPUB…`)}`, { label: 'the progress message to close when done', timeoutMs: 15000 })
+
+      await cdp.evaluate(`${PLUGIN}.settings.set('destinationMode', 'graph-assets'); ${PLUGIN}.settings.set('rememberFolder', true); true`)
+    },
+  },
+  {
     name: "the panel follows the active theme: background, font (buttons too) and accent, live",
     async run({ cdp }) {
       // A stand-in theme that works the way Adwaita and Logseq's accent picker
