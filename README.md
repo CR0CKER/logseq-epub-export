@@ -12,6 +12,8 @@ with:
   included (and a muted style for links to pages that don't exist).
 - **`#tags` as browsable index chapters** — each tag lists its member pages.
 - **"Linked References"** on every page — the backlinks, as working links.
+- **Your images, embedded** — pictures from the graph's `assets` folder are
+  packed into the book, downscaled for e-ink (see [Images](#images)).
 - **`{{query (property type "X")}}` expansion** — index/MoC pages like
   `[[People]]` become real lists instead of dead macros.
 - **A Home/Contents chapter** plus a grouped TOC (Pages / Tags / Journals) that
@@ -30,6 +32,7 @@ with:
 - [Usage](#usage)
 - [Settings](#settings)
 - [Delivering to the Boox / KOReader](#delivering-to-the-boox--koreader)
+- [Images](#images)
 - [Cover](#cover)
 - [Limitations](#limitations)
 - [Troubleshooting](#troubleshooting)
@@ -124,12 +127,31 @@ Where **graph-assets** lands:
 
 Default flow for a **file graph**: keep **Save destination = graph-assets**, let
 **Syncthing** carry the graph folder to the device, and open the `.epub` from
-`assets/storages/logseq-epub-export/` in KOReader.
+`assets/storages/logseq-epub-export/` or another selected destination in KOReader.
 
 A **DB graph** lives in Logseq's own data folder rather than a folder you chose,
 so either sync `~/logseq/graphs/<graph name>/assets/storages/logseq-epub-export/`
 on its own, or switch **Save destination** to **custom-folder** and pick a folder
 you already sync.
+
+<sub>[↑ Back to contents](#contents)</sub>
+
+## Images
+
+Images stored in the graph are embedded in the EPUB: `![alt](../assets/…)` in a
+file graph, and pasted or dropped images (image blocks) in a DB graph.
+
+- **Sized for e-ink.** Anything larger than **1264 px** on its long edge is
+  downscaled — about the size of a 6–7″ e-reader screen, so a phone photo doesn't
+  add megabytes the device can't show.
+- **In formats KOReader renders reliably.** JPEG and PNG that already fit are
+  copied unchanged. Larger photos are re-encoded as JPEG, images with
+  transparency stay PNG, and other formats (WebP, GIF, SVG, …) are converted.
+- **Web images stay links.** `![alt](https://…)` becomes a link labelled
+  `[image: alt]`: the export makes no network requests.
+- An image that can't be read or decoded (a missing file, a PDF, an unsupported
+  format) keeps a labelled `[image: …]` placeholder, and the panel log says how
+  many.
 
 <sub>[↑ Back to contents](#contents)</sub>
 
@@ -156,8 +178,8 @@ in the plugin and embedded in the EPUB. A few things worth knowing:
 ## Limitations
 
 - **Read-only snapshot** — re-run to refresh after editing the graph.
-- **Images are shown as labelled placeholders**, not embedded (graph asset files
-  aren't readable from the plugin sandbox).
+- **Web images are not downloaded**, and other assets (PDFs, audio, video) are
+  not embedded; see [Images](#images).
 - Block references / embeds (`((…))`, `{{embed …}}`) are not resolved.
 - Only `(property <key> "<value>")` queries are expanded; other `{{query}}`
   forms render as a muted note. On DB graphs the key is matched against the
@@ -165,6 +187,8 @@ in the plugin and embedded in the EPUB. A few things worth knowing:
 - **DB graphs:** Logseq's own properties (icons, timestamps, …) and built-in
   classes (Page, Journal, Task, …) are left out of the properties table and the
   tag index; block-level properties are not shown.
+- **Images are re-encoded in the app**, one at a time; a graph with many large
+  photos makes the export noticeably slower.
 - **Large graphs export page by page** through the plugin API (three calls per
   page on a DB graph), so a graph with thousands of pages takes a while.
 
@@ -187,6 +211,11 @@ profile the demo graph is not a real graph. Open or create a graph first.
 **Can't find the EPUB after exporting a DB graph.** It is not next to your notes:
 DB graphs live under `~/logseq/graphs/<graph name>/`. See
 [Settings](#settings) for the exact folder.
+
+**An image shows as `[image: …]` instead of the picture.** The file could not be
+read or decoded: it is missing from `assets/`, is not an image (e.g. a PDF), or
+is in a format Logseq's Chromium can't decode (e.g. HEIC). The panel log counts
+these. Images linked from the web are always links, by design.
 
 **A link shows as grey text instead of a link.** The target page has no content,
 so it has no chapter. Empty pages are skipped on purpose.
@@ -220,7 +249,9 @@ really returns — and that difference is exactly what broke DB graphs.
 normalization against entity shapes captured from both builds;
 `tests/smoke.ts` renders a synthetic graph and packages an EPUB (mimetype first
 and stored, cover declared, inline rules not re-processing each other, names with
-`&`/`<`/`>` escaped but still linked).
+`&`/`<`/`>` escaped but still linked); `tests/assets.ts` covers which image
+paths count as graph assets (no path traversal), magic-byte type detection, the
+downscale/re-encode decision and images in the EPUB manifest).
 
 **Live (`npm run test:live`, local only).** Launches each Logseq build with an
 isolated `HOME` and `--user-data-dir`, loads this repo's `dist/` as an unpacked
@@ -229,7 +260,9 @@ clicks the toolbar button with a real pointer event and takes the written EPUB
 apart: container validity, well-formed XHTML (Chromium's own XML parser), book
 title, page-name casing, links, aliases, `&` in names, multi-word tags, tag
 indexes, backlinks, headings and nesting, properties and property queries,
-journals, built-in pages left out, the icon glyph, the File System Access API,
+journals, built-in pages left out, embedded images (a 2000 px photo arriving as
+a 1264 px JPEG, a small transparent PNG kept byte-for-byte, a web image left a
+link; on 2.x the images are pasted in, as a user would), the icon glyph, the File System Access API,
 and the panel opening in the app's colours.
 
 On 0.10.x a fresh profile has no graph, and it only opens a folder through the

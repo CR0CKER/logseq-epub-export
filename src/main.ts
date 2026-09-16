@@ -134,7 +134,9 @@ async function runExport(): Promise<void> {
     const result = await exportGraphToEpub((m) => log(m), {
       includeJournals: logseq.settings?.includeJournals !== false,
     })
-    log(`Built ${result.stats.pages} pages, ${result.stats.tags} tags, ${result.stats.journals} journals.`)
+    const { stats } = result
+    log(`Built ${stats.pages} pages, ${stats.tags} tags, ${stats.journals} journals, ${stats.images} images.`)
+    if (stats.imagesFailed) log(`${stats.imagesFailed} image(s) could not be read and are shown as placeholders.`)
     const where = destinationMode === 'custom-folder'
       ? await writeToCustomFolder(graph.url, name, result.bytes)
       : await writeToGraphAssets(name, result.bytes)

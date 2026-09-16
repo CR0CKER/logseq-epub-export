@@ -1,5 +1,6 @@
 import '@logseq/libs'
 import { SlugRegistry } from './slug'
+import { dbAssetKey } from './assets'
 import {
   DB_GRAPH_PREFIX,
   blockText,
@@ -18,6 +19,8 @@ export interface BlockNode {
   properties: Record<string, any>
   /** 1–6 when this block is a Markdown heading (`## …`), else undefined. */
   heading?: number
+  /** A 2.x DB image block: the asset to show, with the block title as alt text. */
+  image?: { key: string; alt: string }
   children: BlockNode[]
 }
 
@@ -52,6 +55,8 @@ export interface GraphModel {
   tagSlug: Map<string, string>
   /** display label to show for a tag, lowercased tag → original casing. */
   tagLabel: Map<string, string>
+  /** asset key (`assets/…`) → its path in the book, for images that loaded. */
+  images: Map<string, string>
 }
 
 const PROPERTY_LINE = /^[A-Za-z0-9_][A-Za-z0-9_-]*:: /
@@ -99,7 +104,8 @@ function normalizeTree(blocks: any[], isDb: boolean): BlockNode[] {
     const children = normalizeTree(b?.children ?? [], isDb)
     // Drop the page-properties pre-block and any block that became empty
     // after stripping properties and has no children.
-    if (!text && children.length === 0) continue
+    const imageKey = dbAssetKey(b)
+    if (!text && children.length === 0 && !imageKey) continue
     const hm = text.match(HEADING)
     const level = hm ? hm[1].length : headingProperty(b)
     out.push({
@@ -108,6 +114,7 @@ function normalizeTree(blocks: any[], isDb: boolean): BlockNode[] {
       content: hm || !level ? text : `${'#'.repeat(level)} ${text}`,
       properties: b?.properties ?? {},
       heading: level,
+      image: imageKey ? { key: imageKey, alt: text } : undefined,
       children,
     })
   }
@@ -217,6 +224,7 @@ export async function collectGraph(
     tagMembers: new Map(),
     tagSlug: new Map(),
     tagLabel: new Map(),
+    images: new Map(),
   }
 
   let i = 0

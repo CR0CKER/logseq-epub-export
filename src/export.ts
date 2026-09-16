@@ -1,4 +1,6 @@
 import { collectGraph } from './graph'
+import { collectImageKeys } from './assets'
+import { loadImages } from './image-loader'
 import { buildCover } from './cover'
 import { buildEpub, NavGroup } from './epub'
 import {
@@ -12,7 +14,7 @@ import {
 export interface ExportResult {
   graphName: string
   bytes: ArrayBuffer
-  stats: { pages: number; tags: number; journals: number }
+  stats: { pages: number; tags: number; journals: number; images: number; imagesFailed: number }
 }
 
 export interface ExportOptions {
@@ -27,6 +29,11 @@ export async function exportGraphToEpub(
   const { includeJournals = true } = options
   onProgress?.('Reading graph…')
   const model = await collectGraph(onProgress)
+
+  // Images before rendering: a chapter links an image only if it made it in.
+  const exported = includeJournals ? [...model.pages, ...model.journals] : model.pages
+  const images = await loadImages(collectImageKeys(exported), onProgress)
+  model.images = images.hrefs
 
   onProgress?.('Rendering chapters…')
   const home = renderHomeChapter(model)
@@ -56,7 +63,7 @@ export async function exportGraphToEpub(
   }
 
   onProgress?.('Packaging EPUB…')
-  const bytes = await buildEpub({ title: model.graphName, chapters, nav, cover })
+  const bytes = await buildEpub({ title: model.graphName, chapters, nav, cover, images: images.files })
 
   return {
     graphName: model.graphName,
@@ -65,6 +72,8 @@ export async function exportGraphToEpub(
       pages: pageChapters.length,
       tags: tagChapters.length,
       journals: journalChapters.length,
+      images: images.files.length,
+      imagesFailed: images.failed.length,
     },
   }
 }

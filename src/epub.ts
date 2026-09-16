@@ -1,5 +1,6 @@
 import JSZip from 'jszip'
 import { Chapter, escapeHtml, STYLE_CSS } from './render'
+import type { EmbeddedImage } from './assets'
 
 export interface NavGroup {
   label: string
@@ -20,6 +21,8 @@ export interface EpubInput {
   nav: NavGroup[]
   /** Optional cover image (PNG/JPEG); shown as the first spine page. */
   cover?: CoverImage | null
+  /** Graph images the chapters reference by `fileName`. */
+  images?: EmbeddedImage[]
 }
 
 const OPF_DIR = 'OEBPS'
@@ -44,10 +47,13 @@ function manifest(input: EpubInput): string {
     ? `<item id="cover-image" href="${input.cover.fileName}" media-type="${input.cover.mediaType}" properties="cover-image" />
     <item id="cover" href="cover.xhtml" media-type="application/xhtml+xml" />\n    `
     : ''
+  const images = (input.images ?? [])
+    .map((img) => `<item id="${img.fileName.replace(/^images\//, '').replace(/\.[^.]+$/, '')}" href="${img.fileName}" media-type="${img.mediaType}" />`)
+    .join('\n    ')
   return `<item id="nav" href="nav.xhtml" media-type="application/xhtml+xml" properties="nav" />
     <item id="ncx" href="toc.ncx" media-type="application/x-dtbncx+xml" />
     <item id="css" href="style.css" media-type="text/css" />
-    ${cover}${items}`
+    ${cover}${items}${images ? `\n    ${images}` : ''}`
 }
 
 function spine(input: EpubInput): string {
@@ -177,6 +183,7 @@ export async function buildEpub(input: EpubInput): Promise<ArrayBuffer> {
     oebps.file('cover.xhtml', coverXhtml(input))
   }
   for (const c of input.chapters) oebps.file(`${c.slug}.xhtml`, c.xhtml)
+  for (const img of input.images ?? []) oebps.file(img.fileName, img.bytes)
 
   return zip.generateAsync({
     type: 'arraybuffer',

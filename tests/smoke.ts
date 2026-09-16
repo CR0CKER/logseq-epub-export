@@ -53,6 +53,7 @@ const model: GraphModel = {
   tagMembers: new Map([['framework', new Set(['ADKAR', 'Kotter 8-Step'])]]),
   tagSlug: new Map([['framework', 'tag-framework']]),
   tagLabel: new Map([['framework', 'framework']]),
+  images: new Map(),
 }
 
 console.log('Rendering chapters…')

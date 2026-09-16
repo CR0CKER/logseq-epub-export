@@ -1,4 +1,5 @@
 import type { BlockNode, GraphModel, GraphPage } from './graph'
+import { MD_IMAGE, assetKey } from './assets'
 
 const lc = (s: string) => s.trim().toLowerCase()
 
@@ -19,7 +20,6 @@ const WIKILINK = /\[\[([^\]]+)\]\]/g
 const TAG_BRACKET = /#\[\[([^\]]+)\]\]/g
 const TAG_PLAIN = /(^|[^\w#&])#([A-Za-z0-9_][\w/-]*)/g
 const MD_LINK = /\[([^\]]+)\]\(([^)]+)\)/g
-const MD_IMAGE = /!\[([^\]]*)\]\(([^)]+)\)/g
 const BARE_URL = /(^|[\s(])((?:https?:\/\/)[^\s)<]+)/g
 
 /** Render one block's inline Logseq markdown to safe XHTML. */
@@ -37,11 +37,17 @@ export function renderInline(text: string, model: GraphModel): string {
   // 2. Inline code spans.
   s = s.replace(/`([^`]+)`/g, (_m, c) => hold(`<code>${c}</code>`))
 
-  // 3. Images → labelled placeholder (graph assets aren't embeddable from the
-  //    plugin sandbox; v1 degrades them gracefully rather than break links).
+  // 3. Images: graph assets that loaded are embedded; web images stay links
+  //    (the export makes no network requests); anything else keeps a
+  //    labelled placeholder.
   s = s.replace(MD_IMAGE, (_m, alt, src) => {
+    const raw = unescapeHtml(String(src))
     const base = String(src).split('/').pop() || String(src)
     const label = (alt && String(alt).trim()) || base
+    const key = assetKey(raw)
+    const href = key ? model.images.get(key) : undefined
+    if (href) return hold(`<img src="${escapeHtml(href)}" alt="${label}" />`)
+    if (/^https?:\/\//i.test(raw.trim())) return hold(`<a class="ext" href="${String(src).trim()}">[image: ${label}]</a>`)
     return hold(`<span class="asset">[image: ${label}]</span>`)
   })
 
@@ -165,12 +171,19 @@ function renderNodeList(nodes: BlockNode[], model: GraphModel): string {
       if (node.children.length) html += renderNodeList(node.children, model)
       continue
     }
-    const inner = renderInline(node.content, model)
+    const inner = node.image ? renderImageBlock(node.image, model) : renderInline(node.content, model)
     const kids = node.children.length ? renderNodeList(node.children, model) : ''
     li.push(`<li>${inner}${kids}</li>`)
   }
   flush()
   return html
+}
+
+/** A 2.x DB image block: the image, or its placeholder if it did not load. */
+function renderImageBlock(image: { key: string; alt: string }, model: GraphModel): string {
+  const href = model.images.get(image.key)
+  const alt = escapeHtml(image.alt)
+  return href ? `<img src="${escapeHtml(href)}" alt="${alt}" />` : `<span class="asset">[image: ${alt}]</span>`
 }
 
 function propertiesTable(page: GraphPage, model: GraphModel): string {
@@ -299,4 +312,5 @@ table.props th { background: #eee; }
 .snip { color: #555; font-size: .9em; }
 .asset { color: #777; font-style: italic; }
 code { font-family: monospace; background: #eee; padding: 0 .2em; }
+img { max-width: 100%; height: auto; }
 `

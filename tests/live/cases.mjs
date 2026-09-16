@@ -17,7 +17,7 @@ import { join, basename } from 'node:path'
 import JSZip from 'jszip'
 import { waitFor } from '../lib/cdp.mjs'
 import { PLUGIN_ID, openFileGraph } from '../lib/scratch.mjs'
-import { EXPECT, writeFileGraph, seedDbGraph } from './fixture.mjs'
+import { EXPECT, IMAGES, writeFileGraph, seedDbGraph, pasteDbImages } from './fixture.mjs'
 
 const UUID = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i
 const TOOLBAR_BUTTON = 'a[data-on-click="runExport"]'
@@ -51,6 +51,20 @@ function bookIndex(files) {
     return m ? chapterAt(m[1]) : null
   }
   return { chapters, h1, byTitle, follow }
+}
+
+/** Width and height from a JPEG's start-of-frame marker. */
+function jpegSize(bytes) {
+  const b = Buffer.from(bytes)
+  for (let i = 2; i < b.length - 9;) {
+    if (b[i] !== 0xff) { i++; continue }
+    const marker = b[i + 1]
+    if (marker >= 0xc0 && marker <= 0xcf && ![0xc4, 0xc8, 0xcc].includes(marker)) {
+      return { height: b.readUInt16BE(i + 5), width: b.readUInt16BE(i + 7) }
+    }
+    i += 2 + b.readUInt16BE(i + 2)
+  }
+  throw new Error('no JPEG frame header found')
 }
 
 function needBook(ctx) {
@@ -99,6 +113,7 @@ export const cases = [
           timeoutMs: 45000,
         })
         assert.equal(await seedDbGraph(cdp), true, 'seeding the DB graph through the API failed')
+        assert.equal(await pasteDbImages(cdp), true, 'pasting the fixture images failed')
         ctx.expectedTitle = 'Demo'
       }
       const graph = await cdp.evaluate(`(async () => JSON.stringify(await logseq.api.get_current_graph()))()`)
@@ -107,7 +122,7 @@ export const cases = [
       // racing OG's file parser.
       await waitFor(
         cdp,
-        `(async () => { for (const n of ${JSON.stringify([...EXPECT.pages, EXPECT.tag, EXPECT.specialPage])}) if (!(await logseq.api.get_page(n))) return false; return true })()`,
+        `(async () => { for (const n of ${JSON.stringify([...EXPECT.pages, EXPECT.tag, EXPECT.specialPage, EXPECT.picturesPage])}) if (!(await logseq.api.get_page(n))) return false; return true })()`,
         { label: 'the fixture pages to be indexed', timeoutMs: 45000 },
       )
       // Built-in pages, as the host itself marks them, for the exclusion case.
@@ -294,6 +309,37 @@ export const cases = [
       assert.ok(hrefs.length > 0, 'the Journals TOC section is empty')
       const journal = chapters.find(([n, x]) => hrefs.includes(n.replace('OEBPS/', '')) && x.includes(EXPECT.journalMarker))
       assert.ok(journal, 'the fixture journal is not in the Journals section')
+    },
+  },
+  {
+    name: 'graph images are embedded, sized for e-ink; web images stay links',
+    async run({ ctx }) {
+      const { byTitle, files } = needBook(ctx)
+      const page = byTitle(EXPECT.picturesPage)
+      assert.ok(page, `no ${EXPECT.picturesPage} chapter`)
+      assert.doesNotMatch(page, /class="asset"/, 'a local image was left as a placeholder')
+      const srcs = [...page.matchAll(/<img src="([^"]+)" alt="[^"]*" \/>/g)].map((m) => m[1])
+      assert.equal(srcs.length, 2, `expected 2 <img> in the chapter, found ${srcs.length}`)
+      const opf = files['OEBPS/content.opf']
+      const kinds = {}
+      for (const src of srcs) {
+        const bytes = files[`OEBPS/${src}`]
+        assert.ok(bytes instanceof Uint8Array, `${src} is not in the book`)
+        const type = opf.match(new RegExp(`href="${src}" media-type="([^"]+)"`))?.[1]
+        assert.ok(type, `${src} is not declared in the manifest`)
+        kinds[type] = { src, bytes }
+      }
+      // The photo: re-encoded as JPEG, longest edge down to the e-ink maximum.
+      const jpeg = kinds['image/jpeg']
+      assert.ok(jpeg, 'the large opaque photo did not become a JPEG')
+      const { width, height } = jpegSize(jpeg.bytes)
+      assert.equal(Math.max(width, height), 1264, `photo is ${width}x${height}, not downscaled to 1264px`)
+      assert.equal(Math.round(width / height), Math.round(IMAGES.photo.width / IMAGES.photo.height), 'photo aspect ratio changed')
+      // The icon: small PNG with transparency, kept byte-for-byte.
+      const kept = kinds['image/png']
+      assert.ok(kept, 'the transparent icon is not a PNG')
+      assert.ok(Buffer.from(kept.bytes).equals(IMAGES.icon.bytes), 'the icon was re-encoded instead of kept')
+      assert.ok(page.includes(`<a class="ext" href="${IMAGES.remote}">[image: web image]</a>`), 'the web image is not a link')
     },
   },
   {

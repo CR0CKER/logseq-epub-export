@@ -106,16 +106,20 @@ export interface CoverImage {
   fileName: string
 }
 
-/** Encode a canvas as opaque JPEG bytes, with a toDataURL fallback for
+/** Encode a canvas as JPEG or PNG bytes, with a toDataURL fallback for
  *  environments where toBlob is unavailable or returns null. JPEG (no alpha)
- *  is the most reliably-rendered cover format for crengine/KOReader. */
-async function encodeJpeg(canvas: HTMLCanvasElement): Promise<ArrayBuffer | null> {
+ *  is the most reliably-rendered format for crengine/KOReader. */
+export async function encodeCanvas(
+  canvas: HTMLCanvasElement,
+  type: 'image/jpeg' | 'image/png' = 'image/jpeg',
+  quality = 0.9,
+): Promise<ArrayBuffer | null> {
   const blob = await new Promise<Blob | null>((resolve) => {
-    try { canvas.toBlob((b) => resolve(b), 'image/jpeg', 0.9) } catch { resolve(null) }
+    try { canvas.toBlob((b) => resolve(b), type, quality) } catch { resolve(null) }
   })
   if (blob) return blob.arrayBuffer()
   try {
-    const dataUrl = canvas.toDataURL('image/jpeg', 0.9)
+    const dataUrl = canvas.toDataURL(type, quality)
     const b64 = dataUrl.split(',')[1]
     const bin = atob(b64)
     const bytes = new Uint8Array(bin.length)
@@ -200,7 +204,7 @@ export async function buildCover(title: string): Promise<CoverImage | null> {
   ctx.font = '500 40px system-ui, -apple-system, "Segoe UI", Roboto, sans-serif'
   ctx.fillText('Exported to EPUB for reading offline', W / 2, H - 220)
 
-  const bytes = await encodeJpeg(canvas)
+  const bytes = await encodeCanvas(canvas)
   if (!bytes) return null
   return { bytes, mediaType: 'image/jpeg', fileName: 'cover.jpg' }
 }

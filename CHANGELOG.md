@@ -16,6 +16,11 @@ First public release.
   e-readers: pages as chapters, tap-to-navigate `[[wikilinks]]` and aliases,
   `#tag` index chapters, Linked References, `{{query (property …)}}` expansion,
   a Home chapter and a grouped Pages / Tags / Journals TOC.
+- Graph images embedded in the book: `![…](../assets/…)` on file graphs and
+  image blocks on DB graphs. Images over 1264 px are downscaled; photos become
+  JPEG, transparent images stay PNG, other formats are converted; files that
+  already fit are copied unchanged. Web images stay links (no network access),
+  and unreadable images keep a labelled placeholder.
 - An auto-generated, e-ink-friendly cover, written as an opaque JPEG and
   declared for EPUB 3, EPUB 2 and Calibre/ADE readers.
 - Settings: save to the graph's assets or a custom folder (remembered per

@@ -14,7 +14,8 @@ DB) and the steps to reproduce.
 ## Scope
 
 The plugin runs inside Logseq's plugin sandbox. It reads the open graph through
-the plugin API and writes one EPUB file, either into the graph's
+the plugin API, reads image files from the graph's `assets/` folder (paths are
+checked so nothing outside it is read), and writes one EPUB file, either into the graph's
 `assets/storages/logseq-epub-export/` folder or into a folder you picked. It makes
 no network requests. Graph content is escaped before it is written into the
 EPUB's XHTML.
