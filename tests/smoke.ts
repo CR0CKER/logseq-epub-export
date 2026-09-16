@@ -75,6 +75,55 @@ assert(renderPageChapter(kotter, model).xhtml.includes('class="ext" href="https:
 assert(tagCh.xhtml.includes('href="adkar.xhtml"') && tagCh.xhtml.includes('href="kotter-8-step.xhtml"'), 'tag index lists members')
 assert(home.xhtml.includes('href="adkar.xhtml"') && home.xhtml.includes('href="tag-framework.xhtml"'), 'home lists pages and tags')
 
+// Names with XML-special characters: looked up by their real name, emitted escaped.
+{
+  const rd = page('R&D', 'r-d', { tags: ['R&D'] }, [
+    { content: 'Research <and> development', properties: {}, children: [] },
+  ])
+  const m: GraphModel = {
+    ...model,
+    pages: [rd],
+    nameToSlug: new Map([['r&d', 'r-d']]),
+    resolvable: new Set(['r&d']),
+    backlinks: new Map(),
+    tagMembers: new Map([['r&d', new Set(['R&D'])]]),
+    tagSlug: new Map([['r&d', 'tag-r-d']]),
+    tagLabel: new Map([['r&d', 'R&D']]),
+  }
+  const linker = page('Linker', 'linker', {}, [
+    { content: 'See [[R&D]] and #[[R&D]]', properties: {}, children: [] },
+  ])
+  const x = renderPageChapter(linker, m).xhtml
+  assert(x.includes('<a href="r-d.xhtml">R&amp;D</a>'), '[[R&D]] resolves and its label is escaped')
+  assert(x.includes('<a class="tag" href="tag-r-d.xhtml">#R&amp;D</a>'), '#[[R&D]] resolves and its label is escaped')
+  const own = renderPageChapter(rd, m).xhtml
+  assert(own.includes('#R&amp;D</a>') && !/&(?!amp;|lt;|gt;|quot;|#)/.test(own), 'properties table escapes tag labels (no bare &)')
+  const tagIdx = renderTagChapter('r&d', m).xhtml
+  assert(!/&(?!amp;|lt;|gt;|quot;|#)/.test(tagIdx), 'tag index escapes its label (no bare &)')
+}
+
+// Inline rules must not re-process each other's output.
+{
+  const m: GraphModel = {
+    ...model,
+    nameToSlug: new Map([...model.nameToSlug, ['change management', 'change-management']]),
+    tagSlug: new Map([...model.tagSlug, ['change management', 'tag-change-management']]),
+    tagLabel: new Map([...model.tagLabel, ['change management', 'change management']]),
+  }
+  const p = page('Inline', 'inline', {}, [
+    { content: 'A #[[change management]] tag', properties: {}, children: [] },
+    { content: 'See https://example.com/a_b_c and [docs](https://example.com/x_y_z)', properties: {}, children: [] },
+  ])
+  const x = renderPageChapter(p, m).xhtml
+  assert(x.includes('A <a class="tag" href="tag-change-management.xhtml">#change management</a> tag'), '#[[multi word]] is one tag link, not a page link or double-wrapped')
+  assert(x.includes('href="https://example.com/a_b_c">https://example.com/a_b_c</a>'), 'bare URL with underscores is not italicised')
+  assert(x.includes('<a class="ext" href="https://example.com/x_y_z">docs</a>'), 'markdown link URL with underscores is not italicised')
+  const plain = renderPageChapter(page('Plain', 'plain', {}, [
+    { content: 'Room C1 and C0 are free', properties: {}, children: [] },
+  ]), m).xhtml
+  assert(plain.includes('Room C1 and C0 are free'), 'literal text like " C1 " is not mistaken for a code placeholder')
+}
+
 console.log('Packaging EPUB…')
 const chapters = [home, adkarCh, kotter && renderPageChapter(kotter, model), tagCh]
 // 1x1 PNG so we can exercise the cover plumbing without a canvas.
