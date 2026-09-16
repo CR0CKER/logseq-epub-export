@@ -24,6 +24,14 @@ The toolbar icon opens a small export panel; **Export now** builds an EPUB of th
   EPUB title (`dc:title`) is the graph name too, so it lists correctly on the
   device.
 
+![The export panel in Logseq 0.10.15, after exporting the "Change Management" graph](screenshots/panel.png)
+
+![The generated cover and the ADKAR chapter of that EPUB: links, a #tag, a heading, page properties and Linked References](screenshots/book.png)
+
+<sub>Top: the panel in Logseq 0.10.15. Bottom: the exported book's cover and one
+chapter, rendered with the book's own stylesheet at e-reader proportions (a browser
+rendering, not a KOReader screenshot). Retake both with `npm run screenshots`.</sub>
+
 ## Contents
 
 - [Compatibility](#compatibility)
@@ -134,7 +142,10 @@ both in one click.
 
 The folder is stored **per graph** in the plugin's IndexedDB (a folder handle
 can't live in plugin settings). This works the same whether the plugin was
-loaded unpacked or installed from a release zip.
+loaded unpacked or installed from a release zip, because the plugin declares
+`"effect": true`: Logseq then runs it in the same origin as the app, which the
+folder picker and the theme-following panel need. Measured on 0.10.15 and 2.0.1:
+without it the plugin is loaded cross-origin and the folder picker is blocked.
 
 The default file name follows **Calibre's library naming**, `Title - Author.epub`:
 the title is the graph name and the author is what the book declares, "Logseq

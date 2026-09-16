@@ -52,9 +52,15 @@ First public release.
   Logseq 2.0.1 (plus a local Logseq OG build, when present) in isolated profiles, exports a seeded graph with one click and
   checks the resulting book. Offline tests (`npm test`) for the entity
   normalization and rendering run in CI.
-- CI (typecheck, offline tests, build, `npm audit`), a tag-driven release
+- CI (typecheck, offline tests, build, `npm audit`), a tag-driven publish
   workflow that attaches the plugin zip, Dependabot, `CONTRIBUTING.md` and
   `SECURITY.md`.
+- A plugin and marketplace icon (a book carrying a connected-nodes graph, on
+  the cover's teal; source `docs/icon.svg`), and README screenshots of the panel
+  and of an exported book, retaken by `npm run screenshots`.
+- The plugin declares `"effect": true`: Logseq otherwise loads it cross-origin
+  (measured on 0.10.15 and 2.0.1), where the folder picker is blocked and the
+  panel cannot follow the theme.
 
 ### Fixed
 

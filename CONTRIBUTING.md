@@ -21,6 +21,10 @@ it's built and how to test it. These are the conventions for changing it.
   `CHANGELOG.md` → `[Unreleased]`.
 - **Keep `render.ts` and `epub.ts` free of `@logseq/libs`** (`import type`
   only), so they bundle into the Node tests.
+- **Keep `"effect": true` in `package.json`.** Without it Logseq loads the plugin
+  cross-origin (measured on 0.10.15 and 2.0.1): the folder picker is blocked and
+  the panel cannot read the theme. `LIVE_EFFECT=false npm run test:live --
+  --install=marketplace` shows it.
 - **The EPUB must stay valid:** `mimetype` first and stored, every chapter
   well-formed XHTML. Both tiers check this.
 
@@ -30,6 +34,14 @@ it's built and how to test it. These are the conventions for changing it.
 npm run typecheck && npm test && npm audit && npm run build
 npm run test:live          # every build; screen unlocked
 ```
+
+## Screenshots and icon
+
+- `npm run screenshots` retakes `screenshots/panel.png` and `screenshots/book.png`
+  in an isolated Logseq 0.10.15 (`--target=` for another build).
+- `icon.png` (256 px) is rendered from `docs/icon.svg`: open it at 512 × 512 in a
+  browser with a transparent background, screenshot, and downscale. Don't use the
+  Chromium flatpak for text: its sandboxed fonts render plain Georgia in italics.
 
 ## Git
 

@@ -1,4 +1,4 @@
-name: Release
+name: Publish
 
 on:
   push:
@@ -31,7 +31,7 @@ jobs:
       - name: Package
         run: |
           mkdir -p release/logseq-epub-export
-          cp -r package.json icon.svg README.md CHANGELOG.md LICENSE dist release/logseq-epub-export/
+          cp -r package.json icon.png README.md CHANGELOG.md LICENSE dist release/logseq-epub-export/
           cd release
           zip -r "../logseq-epub-export-${GITHUB_REF_NAME}.zip" logseq-epub-export
 

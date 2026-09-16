@@ -1,0 +1,41 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256">
+  <!-- Logseq EPUB Export: a book whose cover carries a connected-nodes graph,
+       on the generated EPUB cover's deep teal. Source for icon.png, which is
+       rendered from it (CONTRIBUTING.md -> Icon). -->
+  <defs>
+    <linearGradient id="tile" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#12a193"/>
+      <stop offset="1" stop-color="#0a6f66"/>
+    </linearGradient>
+    <linearGradient id="page" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#e3e9ee"/>
+      <stop offset="1" stop-color="#ffffff"/>
+    </linearGradient>
+  </defs>
+
+  <!-- tile -->
+  <rect x="8" y="8" width="240" height="240" rx="54" fill="url(#tile)"/>
+
+  <!-- book: page block, then cover with spine -->
+  <path d="M74 60h110a12 12 0 0 1 12 12v126a12 12 0 0 1-12 12H74z" fill="url(#page)"/>
+  <rect x="62" y="48" width="122" height="152" rx="12" fill="#ffffff"/>
+  <rect x="62" y="48" width="22" height="152" rx="10" fill="#dfe7ec"/>
+  <rect x="80" y="48" width="4" height="152" fill="#c9d4db"/>
+
+  <!-- bookmark ribbon: reads as a book, not a stack of paper -->
+  <path d="M160 48h18v34l-9-7-9 7z" fill="#0a6f66"/>
+
+  <!-- graph on the cover: an uneven network, so it never reads as an "x" -->
+  <g stroke="#0d8c80" stroke-width="7" stroke-linecap="round">
+    <line x1="128" y1="128" x2="104" y2="96"/>
+    <line x1="128" y1="128" x2="160" y2="116"/>
+    <line x1="128" y1="128" x2="112" y2="170"/>
+    <line x1="160" y1="116" x2="158" y2="166"/>
+    <line x1="112" y1="170" x2="158" y2="166"/>
+  </g>
+  <circle cx="128" cy="128" r="15" fill="#0f1720"/>
+  <circle cx="104" cy="96" r="10" fill="#0d8c80"/>
+  <circle cx="160" cy="116" r="10" fill="#0d8c80"/>
+  <circle cx="112" cy="170" r="10" fill="#0d8c80"/>
+  <circle cx="158" cy="166" r="8" fill="#0d8c80"/>
+</svg>

@@ -42,7 +42,14 @@ export async function launch(target, { pluginPath = REPO_ROOT, settings = {}, in
   if (install === 'marketplace') {
     const dest = join(dot, 'plugins', PLUGIN_ID)
     mkdirSync(dest, { recursive: true })
-    for (const f of ['package.json', 'icon.svg', 'dist']) cpSync(join(pluginPath, f), join(dest, f), { recursive: true })
+    for (const f of ['package.json', 'icon.png', 'dist']) cpSync(join(pluginPath, f), join(dest, f), { recursive: true })
+    // LIVE_EFFECT=false: test the installed plugin without `effect` (the
+    // marketplace reviews effect: true plugins more strictly).
+    if (process.env.LIVE_EFFECT) {
+      const pkg = JSON.parse(readFileSync(join(dest, 'package.json'), 'utf8'))
+      pkg.effect = process.env.LIVE_EFFECT === 'true'
+      writeFileSync(join(dest, 'package.json'), JSON.stringify(pkg, null, 2))
+    }
   }
   writeFileSync(
     join(dot, 'preferences.json'),

@@ -28,7 +28,8 @@
     "typecheck": "tsc --noEmit",
     "test": "node tests/run-unit.mjs",
     "preview:cover": "esbuild tests/cover-preview.ts --bundle --outfile=docs/cover-preview.js",
-    "test:live": "npm run build && node tests/live/run.mjs"
+    "test:live": "npm run build && node tests/live/run.mjs",
+    "screenshots": "npm run build && node scripts/screenshots.mjs"
   },
   "license": "MIT",
   "dependencies": {
@@ -46,7 +47,7 @@
   "logseq": {
     "id": "logseq-epub-export",
     "title": "EPUB Export",
-    "icon": "./icon.svg"
+    "icon": "./icon.png"
   },
   "overrides": {
     "dompurify": "^3.4.15",
