@@ -169,6 +169,11 @@ export const cases = [
         label: 'the toolbar button',
         timeoutMs: 20000,
       })
+      // No hover tooltip (the old one promised a right-click menu that does not
+      // exist), but still a name for screen readers.
+      const attrs = JSON.parse(await cdp.evaluate(`(() => { const a = document.querySelector(${JSON.stringify(TOOLBAR_BUTTON)}); return JSON.stringify({ title: a.getAttribute('title'), label: a.getAttribute('aria-label') }) })()`))
+      assert.equal(attrs.title, null, `the toolbar button still has a tooltip: ${attrs.title}`)
+      assert.equal(attrs.label, 'Export graph to EPUB', 'the toolbar button has no accessible name')
     },
   },
   {
