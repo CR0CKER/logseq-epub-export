@@ -20,7 +20,7 @@ import { PLUGIN_ID, openFileGraph } from '../lib/scratch.mjs'
 import { EXPECT, IMAGES, writeFileGraph, seedDbGraph, pasteDbImages } from './fixture.mjs'
 
 const UUID = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i
-const TOOLBAR_BUTTON = 'a[data-on-click="runExport"]'
+const TOOLBAR_BUTTON = 'a[data-on-click="openPanel"]'
 
 /** A real pointer click at an element's centre, the way a user clicks. */
 async function realClick(cdp, selector) {
@@ -121,7 +121,23 @@ async function storedFolder(cdp, graphUrl) {
   })()`)
 }
 
-const panelVisible = (cdp) => cdp.evaluate(`${FRAME}.offsetParent !== null`)
+/**
+ * Export the way a user does: the toolbar icon opens the panel, then a real
+ * click on "Export now". A panel left open covers the toolbar, so close it
+ * first.
+ */
+async function exportFromToolbar(cdp) {
+  if (await cdp.evaluate(`${FRAME}.offsetParent !== null`)) {
+    await cdp.evaluate(`${FRAME}.contentDocument.querySelector('#ee-close')?.click(); true`)
+    await waitFor(cdp, `${FRAME}.offsetParent === null`, { label: 'the open panel to close', timeoutMs: 10000 })
+  }
+  await realClick(cdp, TOOLBAR_BUTTON)
+  await waitFor(cdp, `Boolean(${FRAME}?.contentDocument?.querySelector('#ee-export')) && ${FRAME}.offsetParent !== null`, {
+    label: 'the toolbar icon to open the panel',
+    timeoutMs: 15000,
+  })
+  await realClickInPlugin(cdp, '#ee-export')
+}
 
 /** Chapter lookups over the unzipped book. */
 function bookIndex(files) {
@@ -226,12 +242,12 @@ export const cases = [
     },
   },
   {
-    name: 'setup: one click on the toolbar button writes an EPUB into the graph',
+    name: 'setup: the toolbar icon opens the panel, and "Export now" writes an EPUB into the graph',
     async run({ cdp, ctx }) {
       assert.ok(ctx.graph?.path, 'no open graph path')
       const dir = join(ctx.graph.path, 'assets/storages', PLUGIN_ID)
       const before = Date.now()
-      await realClick(cdp, TOOLBAR_BUTTON)
+      await exportFromToolbar(cdp)
       const deadline = Date.now() + 60000
       let file = null
       while (Date.now() < deadline && !file) {
@@ -461,15 +477,14 @@ export const cases = [
       assert.equal(await storedFolder(cdp, ctx.graph.url), null, 'a folder is already stored before the first export')
 
       let since = Date.now() - 1000
-      await realClick(cdp, TOOLBAR_BUTTON)
+      await exportFromToolbar(cdp)
       const first = await waitForFolderExport(cdp, 'Kobo books', book, since)
       assert.equal(first.entry, 'mimetype', 'the file in the chosen folder is not an EPUB')
-      assert.deepEqual(await pickerCalls(cdp), [true], 'the toolbar click did not open the picker with user activation')
-      assert.equal(await panelVisible(cdp), false, 'the panel opened although the picker could ask directly')
+      assert.deepEqual(await pickerCalls(cdp), [true], '"Export now" did not open the picker with user activation')
       assert.equal(await storedFolder(cdp, ctx.graph.url), 'Kobo books', 'the chosen folder was not remembered')
 
       since = first.lastModified
-      await realClick(cdp, TOOLBAR_BUTTON)
+      await exportFromToolbar(cdp)
       await waitForFolderExport(cdp, 'Kobo books', book, since)
       assert.deepEqual(await pickerCalls(cdp), [true], 'the second export asked for a folder again')
     },
@@ -514,9 +529,9 @@ export const cases = [
 
       await stubFolderPicker(cdp, 'Other books')
       let since = Date.now() - 1000
-      await realClick(cdp, TOOLBAR_BUTTON)
+      await exportFromToolbar(cdp)
       const first = await waitForFolderExport(cdp, 'Other books', book, since)
-      await realClick(cdp, TOOLBAR_BUTTON)
+      await exportFromToolbar(cdp)
       await waitForFolderExport(cdp, 'Other books', book, first.lastModified)
       assert.deepEqual(await pickerCalls(cdp), [true, true], 'with Remember off, each export must ask for the folder')
       assert.equal(await storedFolder(cdp, ctx.graph.url), null, 'a folder was stored although Remember is off')
@@ -566,7 +581,7 @@ export const cases = [
         w.showDirectoryPicker = async () => { throw new w.DOMException('The user aborted a request.', 'AbortError') }
         return true
       })()`)
-      await realClick(cdp, TOOLBAR_BUTTON)
+      await exportFromToolbar(cdp)
       await waitFor(cdp, hostText('no folder was chosen'), { label: 'a visible message that no folder was chosen', timeoutMs: 15000 })
 
       // A folder whose first write takes a while, so the export is still running
@@ -584,7 +599,7 @@ export const cases = [
         return true
       })()`)
       const since = Date.now() - 1000
-      await realClick(cdp, TOOLBAR_BUTTON)
+      await exportFromToolbar(cdp)
       await waitFor(cdp, hostText(`Exporting “${ctx.expectedTitle}” to EPUB…`), { label: 'the progress message while exporting', timeoutMs: 15000, intervalMs: 100 })
       await waitForFolderExport(cdp, 'Slow books', book, since)
       await waitFor(cdp, `!${hostText(`Exporting “${ctx.expectedTitle}” to EPUB…`)}`, { label: 'the progress message to close when done', timeoutMs: 15000 })
@@ -604,11 +619,11 @@ export const cases = [
         w.showDirectoryPicker = () => new Promise((resolve) => { w.__releasePicker = () => resolve(null) })
         return true
       })()`)
-      await realClick(cdp, TOOLBAR_BUTTON)
+      await exportFromToolbar(cdp)
       await waitFor(cdp, hostText('rather than the folder itself'), { label: 'the hint about protected folders when the picker opens', timeoutMs: 15000 })
       // Error notifications stay on screen, so count them: each click must add one.
       const stuckCount = `document.body.innerText.split('The folder picker is stuck').length - 1`
-      await realClick(cdp, TOOLBAR_BUTTON)
+      await exportFromToolbar(cdp)
       await waitFor(cdp, `${stuckCount} >= 1`, { label: 'the stuck-picker explanation on the next click', timeoutMs: 15000 })
       const before = await cdp.evaluate(stuckCount)
 
@@ -620,7 +635,7 @@ export const cases = [
         w.showDirectoryPicker = async () => { throw new w.DOMException("Failed to execute 'showDirectoryPicker' on 'Window': File picker already active.", 'NotAllowedError') }
         return true
       })()`)
-      await realClick(cdp, TOOLBAR_BUTTON)
+      await exportFromToolbar(cdp)
       await waitFor(cdp, `${stuckCount} > ${before}`, { label: 'the explanation for "File picker already active"', timeoutMs: 15000 })
 
       await cdp.evaluate(`${PLUGIN}.settings.set('destinationMode', 'graph-assets'); ${PLUGIN}.settings.set('rememberFolder', true); true`)

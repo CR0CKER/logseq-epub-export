@@ -34,6 +34,8 @@ First public release.
   forgets the stored folders so each export asks again. The panel offers
   **Change folder…**, and **Choose folder and export…** when an export can't open
   the picker itself. Works for unpacked and installed plugins alike.
+- The toolbar icon opens the export panel (graph, folder, a log of each step,
+  **Export now**); the command palette also has a direct export.
 - A panel that follows the active theme — background, font and accent colour —
   and restyles live when the theme, mode or accent changes; command palette
   entries.

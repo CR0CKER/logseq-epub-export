@@ -141,10 +141,11 @@ let pickerPending = false
  * Show the folder picker. Null if the user cancels.
  *
  * Chromium opens it only with user activation in this frame. A click on the
- * toolbar button or a command-palette pick provides that (same-origin frames
- * share the activation; measured on 0.10.15, 2.0.1 and the OG build, with both
- * unpacked and installed plugins), so an export can ask directly. Anything
- * else throws NeedsClick, and the caller falls back to the panel's button.
+ * panel's "Export now" provides that, and so does a command-palette pick, via
+ * the host (same-origin frames share the activation; measured on 0.10.15,
+ * 2.0.1 and the OG build, with both unpacked and installed plugins), so an
+ * export can ask directly. Anything else throws NeedsClick, and the caller
+ * falls back to the panel's "Choose folder and export…".
  */
 async function pickFolder(): Promise<any | null> {
   const picker = (window as any).showDirectoryPicker
@@ -354,11 +355,12 @@ function bootstrap() {
     openPanel() { void openPanel_() },
   })
 
-  // One-click toolbar action: export the active graph with remembered settings.
+  // The toolbar icon opens the panel; its "Export now" runs the export. The
+  // command palette keeps a direct export ("export current graph now").
   logseq.App.registerUIItem('toolbar', {
     key: 'logseq-epub-export',
     template: `
-      <a data-on-click="runExport" class="button" title="Export to epub">
+      <a data-on-click="openPanel" class="button" title="Export to epub">
         <i class="ti ti-book-download"></i>
       </a>
     `,

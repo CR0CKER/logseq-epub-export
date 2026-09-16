@@ -5,8 +5,8 @@ explore it like a wiki on an e-reader — built for **KOReader** on e-ink device
 (Boox, Kobo, Kindle, …) where Markdown files render as plain text and
 `[[wikilinks]]` aren't tappable.
 
-One click on the toolbar icon builds an EPUB of the **currently selected graph**
-with:
+The toolbar icon opens a small export panel; **Export now** builds an EPUB of the
+**currently selected graph** with:
 
 - **Tap-to-navigate `[[wikilinks]]`** — resolved to internal EPUB links, aliases
   included (and a muted style for links to pages that don't exist).
@@ -92,11 +92,14 @@ then **Load unpacked plugin** on this folder.
 
 ## Usage
 
-- Click the **book-download icon** in the toolbar to export the active graph
-  using your saved settings (genuinely one click).
-- Or run **`EPUB Export: export current graph now`** from the command palette.
-- **`EPUB Export: open panel`** opens a small panel to export, watch progress,
-  and change the custom export folder.
+- Click the **book-download icon** in the toolbar to open the export panel. It
+  names the graph, shows the custom folder (with **Change folder…**) when you
+  save to one, and logs each step. **Export now** exports with your saved
+  settings.
+- **`EPUB Export: open panel`** in the command palette (Ctrl+Shift+P) opens the
+  same panel.
+- **`EPUB Export: export current graph now`** exports directly, without the
+  panel; an "Exporting…" notification shows until it's done.
 - **`EPUB Export: forget export folder (this graph)`** clears the remembered
   custom folder for the open graph only; the next export asks again.
 
@@ -117,8 +120,9 @@ then **Load unpacked plugin** on this folder.
 Logseq's plugin settings have no button or folder-picker field, so the folder is
 chosen during an export instead:
 
-1. Set **Save destination** to `custom-folder` and click the toolbar icon. A
-   folder picker opens; choose a folder, and the export is saved there.
+1. Set **Save destination** to `custom-folder`, click the toolbar icon, then
+   **Export now**. A folder picker opens; choose a folder, and the export is
+   saved there.
 2. Later exports go straight to that folder (with **Remember export folder** on).
 3. To **change** it: untick **Remember export folder** (or run
    **`EPUB Export: forget export folder (this graph)`**), and the next export
@@ -294,14 +298,14 @@ downscale/re-encode decision and images in the EPUB manifest).
 **Live (`npm run test:live`, local only).** Launches each Logseq build with an
 isolated `HOME` and `--user-data-dir`, loads this repo's `dist/` as an unpacked
 plugin, seeds the same small graph (Markdown files on OG, the plugin API on 2.x),
-clicks the toolbar button with a real pointer event and takes the written EPUB
+clicks the toolbar icon and the panel's **Export now** with real pointer events and takes the written EPUB
 apart: container validity, well-formed XHTML (Chromium's own XML parser), book
 title, page-name casing, links, aliases, `&` in names, multi-word tags, tag
 indexes, backlinks, headings and nesting, properties and property queries,
 journals, built-in pages left out, embedded images (a 2000 px photo arriving as
 a 1264 px JPEG, a small transparent PNG kept byte-for-byte, a web image left a
 link; on 2.x the images are pasted in, as a user would), the icon glyph, the File System Access API,
-the custom folder (the toolbar click opens the picker directly and later exports
+the custom folder (**Export now** opens the picker directly and later exports
 skip it; unticking **Remember export folder** forgets the folder and makes every
 export ask; an export without a click behind it falls back to the panel's
 **Choose folder and export…**), and the panel following the active theme — its
