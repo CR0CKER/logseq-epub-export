@@ -94,8 +94,8 @@ then **Load unpacked plugin** on this folder.
 
 - Click the **book-download icon** in the toolbar to open the export panel. It
   names the graph, shows the custom folder (with **Change folder…**) when you
-  save to one, and logs each step. **Export now** exports with your saved
-  settings.
+  save to one, and logs each step and message. **Export now** exports with your
+  saved settings. Close it with the **×** in its corner or **Esc**.
 - **`EPUB Export: open panel`** in the command palette (Ctrl+Shift+P) opens the
   same panel.
 - **`EPUB Export: export current graph now`** exports directly, without the

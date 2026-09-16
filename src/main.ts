@@ -89,6 +89,24 @@ function log(msg: string) {
   console.log('logseq-epub-export:', msg)
 }
 
+/**
+ * Tell the user something: in the panel's log while the panel is open, as a
+ * Logseq notification otherwise. Notifications appear top-right, right over
+ * the panel's close button, so they must not pile up on an open panel.
+ * Returns the notification key, or null when it went to the panel.
+ */
+async function notify(msg: string, status: 'info' | 'success' | 'warning' | 'error', timeout?: number): Promise<string | null> {
+  if (panel && logseq.isMainUIVisible) {
+    panel.log(msg)
+    return null
+  }
+  try {
+    return await logseq.UI.showMsg(msg, status, timeout ? { timeout } : undefined)
+  } catch {
+    return null
+  }
+}
+
 /** Ensure read+write permission on a File System Access directory handle. */
 async function ensureRW(handle: any): Promise<boolean> {
   try {
@@ -167,11 +185,11 @@ async function pickFolder(): Promise<any | null> {
       new Promise<boolean>((r) => setTimeout(() => r(false), 150)),
     ])
     if (!settledAtOnce) {
-      void logseq.UI.showMsg(
+      void notify(
         'Choose the folder for the EPUB. Pick a folder inside Downloads, Documents or ' +
           'Desktop rather than the folder itself: Logseq cannot open those.',
         'info',
-        { timeout: 8000 },
+        8000,
       )
     }
     return await request
@@ -181,12 +199,12 @@ async function pickFolder(): Promise<any | null> {
       // Also what Chromium reports when it refuses the chosen folder (the home
       // folder itself, system folders), so say both, never just go quiet.
       console.warn('logseq-epub-export: folder picker returned no folder', e?.name, e?.message)
-      await logseq.UI.showMsg(
+      await notify(
         'EPUB export stopped: no folder was chosen. If you did choose one, Logseq ' +
           'may not allow that folder (for example your home folder or a system ' +
           'folder); choose a folder inside it instead.',
         'warning',
-        { timeout: 12000 },
+        12000,
       )
       return null
     }
@@ -231,7 +249,7 @@ async function exportFolder(graph: { name: string; url: string }): Promise<any |
 async function runExport(chosen?: any): Promise<void> {
   if (busy) { log('An export is already running.'); return }
   const graph = await currentGraph()
-  if (!graph) { await logseq.UI.showMsg('Could not read the current graph.', 'error'); return }
+  if (!graph) { await notify('Could not read the current graph.', 'error'); return }
 
   const destinationMode = (logseq.settings?.destinationMode as string) || 'graph-assets'
   let folder: any = null
@@ -240,7 +258,7 @@ async function runExport(chosen?: any): Promise<void> {
       // Ask before building the book: the click's activation does not last.
       folder = chosen ?? (await exportFolder(graph))
     } catch (e: any) {
-      await logseq.UI.showMsg(`EPUB export: ${e?.message ?? e}`, 'error')
+      await notify(`EPUB export: ${e?.message ?? e}`, 'error')
       return
     }
     if (!folder) return
@@ -254,12 +272,12 @@ async function runExport(chosen?: any): Promise<void> {
     versioned: logseq.settings?.outputMode === 'versioned',
   })
   log(`Exporting “${graph.name}” → ${name}`)
-  // A toolbar export has no panel; without this a large graph looks like
-  // nothing is happening for a minute.
-  let progress: string | null = null
-  try {
-    progress = await logseq.UI.showMsg(`Exporting “${graph.name}” to EPUB…`, 'info', { timeout: 30 * 60 * 1000 })
-  } catch { /* the export itself does not depend on it */ }
+  // Without the panel (a command-palette export) nothing else shows progress,
+  // and a large graph looks like nothing is happening for a minute. With the
+  // panel open, its log already does.
+  const progress = panel && logseq.isMainUIVisible
+    ? null
+    : await notify(`Exporting “${graph.name}” to EPUB…`, 'info', 30 * 60 * 1000)
   try {
     const result = await exportGraphToEpub((m) => log(m), {
       includeJournals: logseq.settings?.includeJournals !== false,
@@ -271,11 +289,11 @@ async function runExport(chosen?: any): Promise<void> {
       ? await writeToFolder(folder, name, result.bytes)
       : await writeToGraphAssets(name, result.bytes)
     log(`Saved: ${where}`)
-    await logseq.UI.showMsg(`EPUB exported: ${name}`, 'success')
+    await notify(`EPUB exported: ${name}`, 'success')
   } catch (e: any) {
     console.error('logseq-epub-export: export failed', e)
-    log(`Export failed: ${e?.message ?? e}`)
-    await logseq.UI.showMsg(`EPUB export failed: ${e?.message ?? e}`, 'error')
+    if (panel && logseq.isMainUIVisible) log(`Export failed: ${e?.message ?? e}`)
+    else await notify(`EPUB export failed: ${e?.message ?? e}`, 'error')
   } finally {
     busy = false
     panel?.setBusy(false)

@@ -35,7 +35,11 @@ First public release.
   **Change folder…**, and **Choose folder and export…** when an export can't open
   the picker itself. Works for unpacked and installed plugins alike.
 - The toolbar icon opens the export panel (graph, folder, a log of each step,
-  **Export now**); the command palette also has a direct export.
+  **Export now**); the command palette also has a direct export. The panel
+  closes with Esc or an × styled like the close button of Logseq's own
+  settings dialog on the running build (0.10.x/OG or 2.x), in the theme's text
+  colour. While it is open, messages go to its log instead of Logseq
+  notifications, which would appear over its close button.
 - A panel that follows the active theme — background, font and accent colour —
   and restyles live when the theme, mode or accent changes; command palette
   entries.

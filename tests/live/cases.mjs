@@ -48,11 +48,15 @@ async function realClickInPlugin(cdp, selector) {
     const e = f?.contentDocument?.querySelector(${JSON.stringify(selector)})
     if (!e) return null
     const fb = f.getBoundingClientRect(), b = e.getBoundingClientRect()
-    return JSON.stringify([fb.left + b.left + b.width / 2, fb.top + b.top + b.height / 2, b.width, b.height])
+    const x = fb.left + b.left + b.width / 2, y = fb.top + b.top + b.height / 2
+    const top = document.elementFromPoint(x, y)
+    const cover = top === f ? null : (top ? top.tagName + '.' + String(top.className).slice(0, 80) + ' "' + (top.textContent || '').trim().slice(0, 60) + '"' : 'nothing')
+    return JSON.stringify([x, y, b.width, b.height, cover])
   })()`)
   assert.ok(rect, `nothing in the plugin frame matches ${selector}`)
-  const [x, y, w, h] = JSON.parse(rect)
+  const [x, y, w, h, cover] = JSON.parse(rect)
   assert.ok(w > 0 && h > 0, `${selector} in the plugin frame has no size`)
+  assert.equal(cover, null, `${selector} in the plugin frame is covered by host UI, so a click cannot reach it`)
   for (const type of ['mousePressed', 'mouseReleased']) {
     await cdp.call('Input.dispatchMouseEvent', { type, x, y, button: 'left', clickCount: 1 })
   }
@@ -137,6 +141,33 @@ async function exportFromToolbar(cdp) {
     timeoutMs: 15000,
   })
   await realClickInPlugin(cdp, '#ee-export')
+}
+
+/** The panel's log text (where messages go while the panel is open). */
+const panelLog = `(${FRAME}?.contentDocument?.querySelector('#ee-log')?.textContent ?? '')`
+const hostText = (needle) => `document.body.innerText.includes(${JSON.stringify(needle)})`
+
+/**
+ * Run a command-palette command with the keyboard, as a user does:
+ * Ctrl+Shift+P, type its label, Enter. A key press gives the plugin frame the
+ * same user activation as a click, so the folder picker may open.
+ */
+async function runPaletteCommand(cdp, label) {
+  if (await cdp.evaluate(`${FRAME}.offsetParent !== null`)) {
+    await cdp.evaluate(`${FRAME}.contentDocument.querySelector('#ee-close')?.click(); true`)
+    await waitFor(cdp, `${FRAME}.offsetParent === null`, { label: 'the open panel to close', timeoutMs: 10000 })
+  }
+  const key = (type, k, code, vk, modifiers = 0) => cdp.call('Input.dispatchKeyEvent', { type, key: k, code, windowsVirtualKeyCode: vk, modifiers })
+  // Ctrl (2) + Shift (8)
+  await key('rawKeyDown', 'P', 'KeyP', 80, 10)
+  await key('keyUp', 'P', 'KeyP', 80, 10)
+  await waitFor(cdp, `document.activeElement?.tagName === 'INPUT'`, { label: 'the command palette to open', timeoutMs: 10000 })
+  await cdp.call('Input.insertText', { text: label })
+  await waitFor(cdp, hostText(label), { label: `the palette to list "${label}"`, timeoutMs: 10000 })
+  await new Promise((r) => setTimeout(r, 400))
+  await key('rawKeyDown', 'Enter', 'Enter', 13)
+  await cdp.call('Input.dispatchKeyEvent', { type: 'char', key: 'Enter', text: '\r', unmodifiedText: '\r' })
+  await key('keyUp', 'Enter', 'Enter', 13)
 }
 
 /** Chapter lookups over the unzipped book. */
@@ -586,26 +617,30 @@ export const cases = [
     },
   },
   {
-    name: 'custom folder: a picker that returns no folder says so, and a running export shows progress',
+    name: 'custom folder: no folder chosen is reported, and progress shows: in the panel, or as a notification without it',
     async run({ cdp, ctx }) {
       const book = `${ctx.expectedTitle} - Logseq EPUB Export.epub`
-      const hostText = (needle) => `document.body.innerText.includes(${JSON.stringify(needle)})`
+      const progressNote = `Exporting “${ctx.expectedTitle}” to EPUB…`
       await cdp.evaluate(`${PLUGIN}.settings.set('destinationMode', 'custom-folder'); ${PLUGIN}.settings.set('rememberFolder', false); true`)
 
-      // Cancelling, or Chromium refusing the chosen folder: both reject with AbortError.
+      // Cancelling, or Chromium refusing the chosen folder: both reject with
+      // AbortError. From the panel, the message goes into its log: a Logseq
+      // notification would sit top-right, over the panel's close button.
       await cdp.evaluate(`(() => {
         const w = ${FRAME}.contentWindow
         w.showDirectoryPicker = async () => { throw new w.DOMException('The user aborted a request.', 'AbortError') }
         return true
       })()`)
       await exportFromToolbar(cdp)
-      await waitFor(cdp, hostText('no folder was chosen'), { label: 'a visible message that no folder was chosen', timeoutMs: 15000 })
+      await waitFor(cdp, `${panelLog}.includes('no folder was chosen')`, { label: 'the panel log to say no folder was chosen', timeoutMs: 15000 })
+      assert.equal(await cdp.evaluate(hostText('no folder was chosen')), false, 'the message also went to a notification over the open panel')
 
       // A folder whose first write takes a while, so the export is still running
-      // when the check looks for the progress message.
-      await cdp.evaluate(`(() => {
+      // when the checks look for progress.
+      const slowFolder = `(() => {
         const w = ${FRAME}.contentWindow
         w.showDirectoryPicker = async () => {
+          if (!w.navigator.userActivation.isActive) throw new w.DOMException('Must be handling a user gesture to show a file picker.', 'SecurityError')
           const real = await (await w.navigator.storage.getDirectory()).getDirectoryHandle('Slow books', { create: true })
           return {
             kind: 'directory', name: real.name,
@@ -614,12 +649,24 @@ export const cases = [
           }
         }
         return true
-      })()`)
-      const since = Date.now() - 1000
+      })()`
+
+      // From the panel: progress in its log, no notification.
+      await cdp.evaluate(slowFolder)
+      let since = Date.now() - 1000
       await exportFromToolbar(cdp)
-      await waitFor(cdp, hostText(`Exporting “${ctx.expectedTitle}” to EPUB…`), { label: 'the progress message while exporting', timeoutMs: 15000, intervalMs: 100 })
+      await waitFor(cdp, `${panelLog}.includes('Exporting “${ctx.expectedTitle}”')`, { label: 'progress in the panel log', timeoutMs: 15000, intervalMs: 100 })
+      assert.equal(await cdp.evaluate(hostText(progressNote)), false, 'a progress notification covers the open panel')
+      const first = await waitForFolderExport(cdp, 'Slow books', book, since)
+      await waitFor(cdp, `${panelLog}.includes('Saved: Slow books/')`, { label: 'the panel log to say where it saved', timeoutMs: 15000 })
+
+      // From the command palette, without the panel: a notification while it runs, closed after.
+      await cdp.evaluate(slowFolder)
+      since = first.lastModified
+      await runPaletteCommand(cdp, 'EPUB Export: export current graph now')
+      await waitFor(cdp, hostText(progressNote), { label: 'the progress notification during a palette export', timeoutMs: 15000, intervalMs: 100 })
       await waitForFolderExport(cdp, 'Slow books', book, since)
-      await waitFor(cdp, `!${hostText(`Exporting “${ctx.expectedTitle}” to EPUB…`)}`, { label: 'the progress message to close when done', timeoutMs: 15000 })
+      await waitFor(cdp, `!${hostText(progressNote)}`, { label: 'the progress notification to close when done', timeoutMs: 15000 })
 
       await cdp.evaluate(`${PLUGIN}.settings.set('destinationMode', 'graph-assets'); ${PLUGIN}.settings.set('rememberFolder', true); true`)
     },
@@ -627,7 +674,6 @@ export const cases = [
   {
     name: 'custom folder: a picker Logseq never answers (a protected folder) is explained, not silent',
     async run({ cdp }) {
-      const hostText = (needle) => `document.body.innerText.includes(${JSON.stringify(needle)})`
       await cdp.evaluate(`${PLUGIN}.settings.set('destinationMode', 'custom-folder'); ${PLUGIN}.settings.set('rememberFolder', false); true`)
       // Electron, for a blocklisted folder such as ~/Downloads, waits for a
       // main-process answer Logseq never gives: the promise never settles.
@@ -637,12 +683,12 @@ export const cases = [
         return true
       })()`)
       await exportFromToolbar(cdp)
-      await waitFor(cdp, hostText('rather than the folder itself'), { label: 'the hint about protected folders when the picker opens', timeoutMs: 15000 })
-      // Error notifications stay on screen, so count them: each click must add one.
-      const stuckCount = `document.body.innerText.split('The folder picker is stuck').length - 1`
+      await waitFor(cdp, `${panelLog}.includes('rather than the folder itself')`, { label: 'the hint about protected folders when the picker opens', timeoutMs: 15000 })
+      // Each export reopens the panel with an empty log, so the explanation
+      // showing up there is new.
+      const stuck = `${panelLog}.includes('The folder picker is stuck')`
       await exportFromToolbar(cdp)
-      await waitFor(cdp, `${stuckCount} >= 1`, { label: 'the stuck-picker explanation on the next click', timeoutMs: 15000 })
-      const before = await cdp.evaluate(stuckCount)
+      await waitFor(cdp, stuck, { label: 'the stuck-picker explanation on the next click', timeoutMs: 15000 })
 
       // After a Logseq restart the plugin forgets its own flag, but Chromium's
       // picker is still stuck and says "File picker already active".
@@ -653,14 +699,46 @@ export const cases = [
         return true
       })()`)
       await exportFromToolbar(cdp)
-      await waitFor(cdp, `${stuckCount} > ${before}`, { label: 'the explanation for "File picker already active"', timeoutMs: 15000 })
+      await waitFor(cdp, stuck, { label: 'the explanation for "File picker already active"', timeoutMs: 15000 })
 
       await cdp.evaluate(`${PLUGIN}.settings.set('destinationMode', 'graph-assets'); ${PLUGIN}.settings.set('rememberFolder', true); true`)
     },
   },
   {
-    name: "the panel follows the active theme: background, font (buttons too) and accent, live",
+    name: 'Escape closes the panel, right after opening and after clicking inside it',
     async run({ cdp }) {
+      const escape = async () => {
+        for (const type of ['keyDown', 'keyUp']) await cdp.call('Input.dispatchKeyEvent', { type, key: 'Escape', code: 'Escape', windowsVirtualKeyCode: 27 })
+      }
+      const open = async () => {
+        // A panel left open by an earlier case covers the toolbar.
+        if (await cdp.evaluate(`${FRAME}.offsetParent !== null`)) {
+          await cdp.evaluate(`${FRAME}.contentDocument.querySelector('#ee-close')?.click(); true`)
+          await waitFor(cdp, `${FRAME}.offsetParent === null`, { label: 'an earlier panel to close', timeoutMs: 10000 })
+        }
+        await realClick(cdp, TOOLBAR_BUTTON)
+        await waitFor(cdp, `Boolean(${FRAME}?.contentDocument?.querySelector('#ee-export')) && ${FRAME}.offsetParent !== null`, {
+          label: 'the toolbar icon to open the panel', timeoutMs: 15000,
+        })
+      }
+      await open()
+      await escape()
+      await waitFor(cdp, `${FRAME}.offsetParent === null`, { label: 'Escape right after opening to close the panel', timeoutMs: 5000 })
+
+      await open()
+      await realClickInPlugin(cdp, '#ee-log')
+      await escape()
+      await waitFor(cdp, `${FRAME}.offsetParent === null`, { label: 'Escape after clicking inside the panel to close it', timeoutMs: 5000 })
+
+      // Opening again still works, and Escape still closes it (listeners are not left behind or lost).
+      await open()
+      await escape()
+      await waitFor(cdp, `${FRAME}.offsetParent === null`, { label: 'Escape to close a reopened panel', timeoutMs: 5000 })
+    },
+  },
+  {
+    name: "the panel follows the active theme: background, font (buttons too), accent live, and a themed × to close",
+    async run({ cdp, target }) {
       // A stand-in theme that works the way Adwaita and Logseq's accent picker
       // do: accent and font set on the theme wrapper, not on <html>, which
       // still carries the default accent.
@@ -707,8 +785,31 @@ export const cases = [
         timeoutMs: 10000,
       })
 
-      await cdp.evaluate(`document.getElementById('epub-test-theme').remove(); ${FRAME}.contentDocument.querySelector('#ee-close').click(); true`)
-      await waitFor(cdp, `${FRAME}.offsetParent === null`, { label: 'the panel to close', timeoutMs: 10000 })
+      // The close button: an × in the top-right corner, styled like the close
+      // button of Logseq's own settings dialog on this build, in the theme's
+      // text colour; no "Close" text button.
+      const x = JSON.parse(await cdp.evaluate(`(() => {
+        const d = ${FRAME}.contentDocument, card = d.querySelector('.ee-card'), b = d.querySelector('#ee-close')
+        const cr = card.getBoundingClientRect(), br = b.getBoundingClientRect(), cs = getComputedStyle(b)
+        return JSON.stringify({
+          label: b.getAttribute('aria-label'), text: b.textContent.trim(), hasSvg: Boolean(b.querySelector('svg')),
+          fromRight: Math.round(cr.right - br.right), fromTop: Math.round(br.top - cr.top), size: Math.round(br.width),
+          opacity: cs.opacity, color: cs.color, cardColor: getComputedStyle(card).color,
+          textButtons: [...d.querySelectorAll('button')].filter((e) => e.textContent.trim() === 'Close').length,
+        })
+      })()`))
+      const expected = target.id === 'db' ? { fromRight: 16, fromTop: 16, size: 16, opacity: '0.7' } : { fromRight: 9, fromTop: 15, size: 24, opacity: '0.6' }
+      assert.equal(x.label, 'Close', 'the × has no accessible name')
+      assert.ok(x.hasSvg && x.text === '', 'the close button is not an icon-only ×')
+      assert.equal(x.textButtons, 0, 'a "Close" text button is still there')
+      assert.deepEqual({ fromRight: x.fromRight, fromTop: x.fromTop, size: x.size, opacity: x.opacity }, expected, "the × does not match Logseq's settings dialog close button on this build")
+      assert.equal(x.color, x.cardColor, "the × is not in the theme's text colour")
+
+      // Click before removing the stand-in theme: the panel restyles on the next
+      // frame, and the font change would move the × out from under the click.
+      await realClickInPlugin(cdp, '#ee-close')
+      await waitFor(cdp, `${FRAME}.offsetParent === null`, { label: 'the × to close the panel', timeoutMs: 10000 })
+      await cdp.evaluate(`document.getElementById('epub-test-theme').remove(); true`)
     },
   },
 ]
