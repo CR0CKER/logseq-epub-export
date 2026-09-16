@@ -8,8 +8,8 @@ explore it like a wiki on an e-reader — built for **KOReader** on e-ink device
 One click on the toolbar icon builds an EPUB of the **currently selected graph**
 with:
 
-- **Tap-to-navigate `[[wikilinks]]`** — resolved to internal EPUB links (and a
-  muted style for links to pages that don't exist).
+- **Tap-to-navigate `[[wikilinks]]`** — resolved to internal EPUB links, aliases
+  included (and a muted style for links to pages that don't exist).
 - **`#tags` as browsable index chapters** — each tag lists its member pages.
 - **"Linked References"** on every page — the backlinks, as working links.
 - **`{{query (property type "X")}}` expansion** — index/MoC pages like
@@ -22,6 +22,40 @@ with:
   EPUB title (`dc:title`) is the graph name too, so it lists correctly on the
   device.
 
+## Contents
+
+- [Compatibility](#compatibility)
+- [How it works](#how-it-works)
+- [Install](#install)
+- [Usage](#usage)
+- [Settings](#settings)
+- [Delivering to the Boox / KOReader](#delivering-to-the-boox--koreader)
+- [Cover](#cover)
+- [Limitations](#limitations)
+- [Troubleshooting](#troubleshooting)
+- [Development](#development)
+- [Releasing](#releasing)
+- [License](#license)
+
+## Compatibility
+
+Works on both lines of Logseq, file graphs and DB graphs. "Verified" means the
+[live suite](#tests) exported a seeded graph on that build and every check on
+the book passed:
+
+| Logseq | Graph type | Status |
+|---|---|---|
+| **Logseq OG** 1.0.0 (the [`logseq/og`](https://github.com/logseq/og) continuation of the 0.10.x line) | file (Markdown) | verified: every live case passes; one reports itself skipped, because OG flags no page as built-in |
+| **Logseq 2.0.1** (DB version) | DB | verified: every live case passes |
+| Logseq 0.10.x official builds (0.10.9–0.10.15) | file | expected to work: same plugin API and data shape as OG; not in the live suite |
+
+The two lines answer the same plugin API calls with differently shaped data —
+a DB graph stores links as `[[uuid]]`, keeps headings in a property and page
+properties under namespaced keys — so the plugin normalizes both before
+rendering (`src/entities.ts` has the full table).
+
+<sub>[↑ Back to contents](#contents)</sub>
+
 ## How it works
 
 A plugin reads Logseq's database (not the raw Markdown), so block trees,
@@ -29,15 +63,25 @@ properties, aliases and tags come pre-resolved. Each page becomes one XHTML
 chapter; everything is packaged into a valid EPUB 3 (with an NCX fallback) using
 [JSZip](https://stuk.github.io/jszip/).
 
-## Install (dev / unpacked)
+<sub>[↑ Back to contents](#contents)</sub>
+
+## Install
+
+**From a release:** download `logseq-epub-export-<version>.zip` from the latest
+GitHub release and unzip it. In Logseq, turn on **Settings → Advanced →
+Developer mode**, then **Plugins → Load unpacked plugin** and pick the unzipped
+folder.
+
+**From source:**
 
 ```sh
 npm install
 npm run build        # outputs ./dist
 ```
 
-In Logseq: **Settings → Advanced → Developer mode**, then **Plugins → Load
-unpacked plugin** → select this folder.
+then **Load unpacked plugin** on this folder.
+
+<sub>[↑ Back to contents](#contents)</sub>
 
 ## Usage
 
@@ -46,12 +90,16 @@ unpacked plugin** → select this folder.
 - Or run **`EPUB Export: export current graph now`** from the command palette.
 - **`EPUB Export: open panel / choose folder`** opens a small panel to pick a
   custom export folder and watch progress.
+- **`EPUB Export: forget export folder (this graph)`** clears a remembered
+  custom folder.
+
+<sub>[↑ Back to contents](#contents)</sub>
 
 ## Settings
 
 | Setting | Options | Notes |
 |---|---|---|
-| **Save destination** | `graph-assets` (default) · `custom-folder` | Graph-assets writes into `assets/storages/<plugin-id>/`. If the graph syncs via **Syncthing**, the EPUB reaches your e-reader automatically. Custom-folder writes to a folder you pick once per graph (dev/unpacked install only). |
+| **Save destination** | `graph-assets` (default) · `custom-folder` | Graph-assets writes into the graph's `assets/storages/logseq-epub-export/` (see below for where that is). Custom-folder writes to a folder you pick once per graph, through the File System Access API. |
 | **On re-export** | `overwrite` (default) · `versioned` | Overwrite the same file, or keep history with a timestamped filename (`<graph> YYYY-MM-DD-HHmm.epub`). |
 | **Include journal pages** | on/off | Adds journals as their own TOC section. |
 | **Output filename** | string | Blank = use the graph name. |
@@ -59,11 +107,27 @@ unpacked plugin** → select this folder.
 The custom export folder is remembered **per graph** (stored in IndexedDB, since
 File System Access handles can't live in plugin settings).
 
+Where **graph-assets** lands:
+
+| Graph type | Folder |
+|---|---|
+| File graph (OG / 0.10.x) | `<your graph folder>/assets/storages/logseq-epub-export/` |
+| DB graph (2.x) | `~/logseq/graphs/<graph name>/assets/storages/logseq-epub-export/` |
+
+<sub>[↑ Back to contents](#contents)</sub>
+
 ## Delivering to the Boox / KOReader
 
-Default flow: keep **Save destination = graph-assets**, let **Syncthing** carry
-the graph folder to the device, and open the `.epub` from
+Default flow for a **file graph**: keep **Save destination = graph-assets**, let
+**Syncthing** carry the graph folder to the device, and open the `.epub` from
 `assets/storages/logseq-epub-export/` in KOReader.
+
+A **DB graph** lives in Logseq's own data folder rather than a folder you chose,
+so either sync `~/logseq/graphs/<graph name>/assets/storages/logseq-epub-export/`
+on its own, or switch **Save destination** to **custom-folder** and pick a folder
+you already sync.
+
+<sub>[↑ Back to contents](#contents)</sub>
 
 ## Cover
 
@@ -83,31 +147,55 @@ in the plugin and embedded in the EPUB. A few things worth knowing:
   an EPUB2 `<guide>` reference (used by Calibre/ADE; crengine ignores it). The
   EPUB title (`dc:title`) is the graph name, so it lists correctly on the device.
 
-### Cover not updating in KOReader?
+<sub>[↑ Back to contents](#contents)</sub>
 
-KOReader caches each book's cover **by file path** on the device. If you
-re-export over the same filename, KOReader can keep showing the old (or missing)
-thumbnail. To force a refresh: in the file browser **long-press the book →
-Book information → refresh**, or **Settings → … → clear the cover/book-info
-cache**. The cover *inside* the book always reflects the latest export (it's the
-first page) — only the browser thumbnail is cached. Using **versioned** output (a
-new filename each time) side-steps the cache entirely.
-
-## Limitations (v1)
+## Limitations
 
 - **Read-only snapshot** — re-run to refresh after editing the graph.
 - **Images are shown as labelled placeholders**, not embedded (graph asset files
   aren't readable from the plugin sandbox).
 - Block references / embeds (`((…))`, `{{embed …}}`) are not resolved.
 - Only `(property <key> "<value>")` queries are expanded; other `{{query}}`
-  forms render as a muted note.
+  forms render as a muted note. On DB graphs the key is matched against the
+  property's **title**.
+- **DB graphs:** Logseq's own properties (icons, timestamps, …) and built-in
+  classes (Page, Journal, Task, …) are left out of the properties table and the
+  tag index; block-level properties are not shown.
+- **Large graphs export page by page** through the plugin API (three calls per
+  page on a DB graph), so a graph with thousands of pages takes a while.
+
+<sub>[↑ Back to contents](#contents)</sub>
+
+## Troubleshooting
+
+**Cover not updating in KOReader?** KOReader caches each book's cover **by file
+path** on the device. If you re-export over the same filename, KOReader can keep
+showing the old (or missing) thumbnail. To force a refresh: in the file browser
+**long-press the book → Book information → refresh**, or **Settings → … → clear
+the cover/book-info cache**. The cover *inside* the book always reflects the
+latest export (it's the first page) — only the browser thumbnail is cached.
+Using **versioned** output (a new filename each time) side-steps the cache
+entirely.
+
+**"Could not read the current graph."** No graph is open — on a fresh Logseq OG
+profile the demo graph is not a real graph. Open or create a graph first.
+
+**Can't find the EPUB after exporting a DB graph.** It is not next to your notes:
+DB graphs live under `~/logseq/graphs/<graph name>/`. See
+[Settings](#settings) for the exact folder.
+
+**A link shows as grey text instead of a link.** The target page has no content,
+so it has no chapter. Empty pages are skipped on purpose.
+
+<sub>[↑ Back to contents](#contents)</sub>
 
 ## Development
 
 ```sh
 npm run typecheck      # tsc --noEmit
-npm run test           # bundles + runs the render/EPUB smoke test
+npm test               # offline tests: entity normalization + render/EPUB smoke test
 npm run build          # production build to ./dist
+npm run test:live      # build, then drive real Logseq OG and 2.x (local only)
 npm run preview:cover  # build docs/cover-preview.js, then open docs/cover-preview.html
 ```
 
@@ -116,6 +204,71 @@ can iterate on the artwork without loading the plugin into Logseq. (`cover.ts`
 uses the browser `<canvas>`/`toBlob` API, so the cover can't be rendered under
 plain Node — preview it in a real browser, or screenshot `tests/cover-shot.ts`
 headlessly.)
+
+Contribution conventions are in [`CONTRIBUTING.md`](CONTRIBUTING.md).
+
+### Tests
+
+Two tiers, because a hand-built model cannot show what each Logseq build's API
+really returns — and that difference is exactly what broke DB graphs.
+
+**Offline (`npm test`, the CI gate).** `tests/entities.ts` checks the OG/2.x
+normalization against entity shapes captured from both builds;
+`tests/smoke.ts` renders a synthetic graph and packages an EPUB (mimetype first
+and stored, cover declared, inline rules not re-processing each other, names with
+`&`/`<`/`>` escaped but still linked).
+
+**Live (`npm run test:live`, local only).** Launches each Logseq build with an
+isolated `HOME` and `--user-data-dir`, loads this repo's `dist/` as an unpacked
+plugin, seeds the same small graph (Markdown files on OG, the plugin API on 2.x),
+clicks the toolbar button with a real pointer event and takes the written EPUB
+apart: container validity, well-formed XHTML (Chromium's own XML parser), book
+title, page-name casing, links, aliases, `&` in names, multi-word tags, tag
+indexes, backlinks, headings and nesting, properties and property queries,
+journals, built-in pages left out, the icon glyph, the File System Access API,
+and the panel opening in the app's colours.
+
+On OG a fresh profile has no graph, and OG only opens a folder through the native
+dialog. The harness starts the app with `--inspect` and answers
+`dialog.showOpenDialog` in the main process with the seeded folder, then clicks
+"Choose a folder" — so the export runs against a real file graph.
+
+It runs both builds by default. OG is looked for at
+`~/.local/opt/logseq-og/Logseq-OG`, 2.x at `~/.local/opt/logseq-db-2.0.1/logseq`;
+override either:
+
+```sh
+npm run test:live -- --target=og      # one build
+LOGSEQ_OG_BIN=/path/to/Logseq-OG npm run test:live
+LOGSEQ_DB_BIN=/path/to/logseq npm run test:live -- --target=db
+```
+
+A target whose binary is missing is skipped with a reason, never silently passed.
+Run it with the screen **unlocked**: a locked session stops Logseq rendering.
+Check first with `loginctl show-session "$XDG_SESSION_ID" -p LockedHint`.
+
+<sub>[↑ Back to contents](#contents)</sub>
+
+## Releasing
+
+Releases are tag-driven:
+
+1. Move `CHANGELOG.md` → `[Unreleased]` into a dated version section, and bump
+   the version with `npm version <x.y.z> --no-git-tag-version` (keeps
+   `package.json` and `package-lock.json` in step).
+2. Run every gate, including the live suite on both builds:
+   `npm run typecheck && npm test && npm audit && npm run test:live`.
+3. Merge, then tag `v<x.y.z>` on the default branch and push the tag. The
+   *Release* workflow builds the plugin and attaches
+   `logseq-epub-export-v<x.y.z>.zip` and `package.json` to a GitHub Release.
+4. Paste the matching release notes (drafts live in `docs/releases/`).
+
+For the Logseq marketplace, a `packages/logseq-epub-export/manifest.json` in
+[`logseq/marketplace`](https://github.com/logseq/marketplace) with
+`"supportsDB": true` (verified above) installs the latest release; later
+releases need no marketplace PR.
+
+<sub>[↑ Back to contents](#contents)</sub>
 
 ## License
 

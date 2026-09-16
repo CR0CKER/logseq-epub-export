@@ -1,0 +1,46 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020  # v7.0.0
+        with:
+          node-version: '22'
+
+      - name: Tag matches package.json
+        run: test "v$(node -p "require('./package.json').version")" = "${GITHUB_REF_NAME}"
+
+      - name: Build and test
+        run: |
+          npm ci
+          npm run typecheck
+          npm test
+          npm run build
+
+      - name: Package
+        run: |
+          mkdir -p release/logseq-epub-export
+          cp -r package.json icon.svg README.md CHANGELOG.md LICENSE dist release/logseq-epub-export/
+          cd release
+          zip -r "../logseq-epub-export-${GITHUB_REF_NAME}.zip" logseq-epub-export
+
+      - name: Release
+        uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64  # v3.0.3
+        with:
+          # package.json on its own as well: Logseq's marketplace reads it from
+          # the release for the version and update checks.
+          files: |
+            logseq-epub-export-${{ github.ref_name }}.zip
+            package.json
+          body_path: docs/releases/${{ github.ref_name }}.md
