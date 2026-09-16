@@ -284,7 +284,10 @@ link; on 2.x the images are pasted in, as a user would), the icon glyph, the Fil
 the custom folder (the toolbar click opens the picker directly and later exports
 skip it; unticking **Remember export folder** forgets the folder and makes every
 export ask; an export without a click behind it falls back to the panel's
-**Choose folder and export…**), and the panel opening in the app's colours. The
+**Choose folder and export…**), and the panel following the active theme — its
+background, its font (buttons included) and the accent colour, read from the
+theme wrapper the way Logseq's accent picker and themes like Adwaita set it, and
+updating while the panel is open. The
 folder picker is replaced by one that behaves like Chromium's — refusing without
 user activation — and hands back a real folder from the app's private file
 system, so the export is read back from it.

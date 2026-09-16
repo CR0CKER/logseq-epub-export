@@ -11,6 +11,12 @@ import '@logseq/libs'
  * blocked, fall back to a polished light/dark palette chosen from the user's
  * preferred theme mode. Either way the panel matches the app, and `watchTheme`
  * restyles an open panel live when the theme changes.
+ *
+ * Read from the theme wrapper (`.dark-theme` / `.light-theme`), not <html>:
+ * Logseq's accent picker and themes such as Adwaita redefine the accent there,
+ * and it is what the visible UI inherits. Measured on 0.10.15 and 2.0.1 with
+ * the Adwaita theme: <html> still said Logseq teal while the app showed GNOME
+ * blue.
  */
 
 const LS_VARS = [
@@ -54,12 +60,17 @@ const DARK_FALLBACK: Palette = {
   '--ls-selection-background-color': '#2d4a73',
 }
 
+/** The element whose styles the host's visible UI inherits. */
+function themeRoot(doc: Document): Element {
+  return doc.querySelector('.dark-theme, .light-theme') ?? doc.body ?? doc.documentElement
+}
+
 function readFromRealm(realm: Window | null): { palette: Palette; hits: number } | null {
   if (!realm) return null
   try {
     const doc = realm.document
     if (!doc) return null
-    const cs = realm.getComputedStyle(doc.documentElement)
+    const cs = realm.getComputedStyle(themeRoot(doc))
     const palette: Palette = {}
     let hits = 0
     for (const name of LS_VARS) {
@@ -97,11 +108,14 @@ function readFontFromRealm(realm: Window | null): string | null {
   try {
     const doc = realm.document
     if (!doc) return null
+    // The font the app's UI actually inherits: a theme can set it on an
+    // element (2.x puts var(--ls-font-family) on <html> with !important), so
+    // the computed family beats the bare variable.
+    const inherited = realm.getComputedStyle(themeRoot(doc)).fontFamily?.trim()
+    if (inherited) return inherited
     const rootVar = realm.getComputedStyle(doc.documentElement)
       .getPropertyValue('--ls-font-family').trim()
-    if (rootVar) return rootVar
-    const bodyFont = realm.getComputedStyle(doc.body).fontFamily?.trim()
-    return bodyFont || null
+    return rootVar || null
   } catch {
     return null
   }
@@ -139,11 +153,31 @@ export async function applyTheme(): Promise<void> {
   style.textContent = css
 }
 
-/** Re-apply on Logseq theme changes so an open panel restyles live. */
+/**
+ * Re-apply whenever the host's look can have changed, so an open panel
+ * restyles live: light/dark mode and theme switches (plugin events), and the
+ * accent picker or a theme stylesheet arriving, which fire no event — watched
+ * directly on the host document, which is same-origin on desktop.
+ */
 export function watchTheme(): void {
-  try {
-    ;(logseq.App as any).onThemeModeChanged?.(() => { void applyTheme() })
-  } catch (e) {
-    console.warn('logseq-epub-export: onThemeModeChanged subscription failed', e)
+  let pending = 0
+  const reapply = () => {
+    cancelAnimationFrame(pending)
+    pending = requestAnimationFrame(() => { void applyTheme() })
   }
+  try {
+    ;(logseq.App as any).onThemeModeChanged?.(reapply)
+    ;(logseq.App as any).onThemeChanged?.(reapply)
+  } catch (e) {
+    console.warn('logseq-epub-export: theme event subscription failed', e)
+  }
+  try {
+    const doc = window.parent?.document
+    if (!doc || doc === document) return
+    const observer = new MutationObserver(reapply)
+    observer.observe(doc.documentElement, { attributes: true, attributeFilter: ['class', 'style', 'data-theme', 'data-color'] })
+    observer.observe(doc.head, { childList: true, subtree: true, characterData: true })
+    const wrapper = doc.querySelector('.dark-theme, .light-theme')
+    if (wrapper) observer.observe(wrapper, { attributes: true, attributeFilter: ['class', 'style'] })
+  } catch { /* cross-origin host: the plugin events above still apply */ }
 }

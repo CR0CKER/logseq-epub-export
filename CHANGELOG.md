@@ -30,7 +30,9 @@ First public release.
   forgets the stored folders so each export asks again. The panel offers
   **Change folder…**, and **Choose folder and export…** when an export can't open
   the picker itself. Works for unpacked and installed plugins alike.
-- A panel that follows the app's light/dark theme, and command palette entries.
+- A panel that follows the active theme — background, font and accent colour —
+  and restyles live when the theme, mode or accent changes; command palette
+  entries.
 - **Logseq 2.x DB graph support.** 2.x returns links as `[[uuid]]`, lowercased
   page names, headings as a property and namespaced page properties; the
   plugin normalizes these (`src/entities.ts`), leaves Logseq's built-in

@@ -550,27 +550,56 @@ export const cases = [
     },
   },
   {
-    name: 'the panel opens from the command palette entry, themed like the app',
+    name: "the panel follows the active theme: background, font (buttons too) and accent, live",
     async run({ cdp }) {
+      // A stand-in theme that works the way Adwaita and Logseq's accent picker
+      // do: accent and font set on the theme wrapper, not on <html>, which
+      // still carries the default accent.
+      const setTheme = (accent) => cdp.evaluate(`(() => {
+        let st = document.getElementById('epub-test-theme')
+        if (!st) { st = document.createElement('style'); st.id = 'epub-test-theme'; document.head.appendChild(st) }
+        st.textContent = ':is(.dark-theme, .light-theme) { --ls-active-primary-color: ${accent}; font-family: "DejaVu Serif", Georgia, serif; }'
+        return true
+      })()`)
+      await setTheme('rgb(201, 42, 42)')
+
       // The palette entry calls the same model method; invoke it the way the
       // host does, then look inside the plugin's iframe.
-      await cdp.evaluate(`LSPluginCore.registeredPlugins.get(${JSON.stringify(PLUGIN_ID)}).caller.callUserModel('openPanel'); true`)
-      const frame = `document.querySelector('iframe#${PLUGIN_ID}_iframe')`
-      await waitFor(cdp, `Boolean(${frame}?.contentDocument?.querySelector('#ee-export')) && ${frame}.offsetParent !== null`, {
+      await cdp.evaluate(`${PLUGIN}.caller.callUserModel('openPanel'); true`)
+      await waitFor(cdp, `Boolean(${FRAME}?.contentDocument?.querySelector('#ee-export')) && ${FRAME}.offsetParent !== null`, {
         label: 'the panel to open',
         timeoutMs: 15000,
       })
-      const got = JSON.parse(await cdp.evaluate(`(() => {
-        const doc = ${frame}.contentDocument
-        const card = doc.querySelector('.ee-card')
-        const host = getComputedStyle(document.documentElement).getPropertyValue('--ls-primary-background-color').trim()
-        const probe = document.createElement('div'); probe.style.background = host; document.body.appendChild(probe)
-        const hostBg = getComputedStyle(probe).backgroundColor; probe.remove()
-        return JSON.stringify({ card: getComputedStyle(card).backgroundColor, hostBg })
+      const measure = async () => JSON.parse(await cdp.evaluate(`(() => {
+        const doc = ${FRAME}.contentDocument
+        const wrapper = document.querySelector('.dark-theme, .light-theme')
+        const resolve = (prop, value) => { const p = document.createElement('div'); p.style[prop] = value; wrapper.appendChild(p); const v = getComputedStyle(p)[prop]; p.remove(); return v }
+        const css = (sel, prop) => getComputedStyle(doc.querySelector(sel))[prop]
+        return JSON.stringify({
+          hostBg: resolve('backgroundColor', 'var(--ls-primary-background-color)'),
+          hostAccent: resolve('backgroundColor', 'var(--ls-active-primary-color)'),
+          hostFont: getComputedStyle(wrapper).fontFamily,
+          cardBg: css('.ee-card', 'backgroundColor'),
+          cardFont: css('.ee-card', 'fontFamily'),
+          buttonFont: css('#ee-export', 'fontFamily'),
+          accent: css('#ee-export', 'backgroundColor'),
+        })
       })()`))
-      assert.equal(got.card, got.hostBg, 'the panel card does not use the app background')
-      await cdp.evaluate(`${frame}.contentDocument.querySelector('#ee-close').click(); true`)
-      await waitFor(cdp, `${frame}.offsetParent === null`, { label: 'the panel to close', timeoutMs: 10000 })
+      const got = await measure()
+      assert.equal(got.cardBg, got.hostBg, 'the panel card does not use the app background')
+      assert.equal(got.cardFont, got.hostFont, "the panel text is not in the theme's font")
+      assert.equal(got.buttonFont, got.hostFont, "the panel buttons are not in the theme's font")
+      assert.equal(got.accent, 'rgb(201, 42, 42)', "the primary button is not in the theme's accent (read from the theme wrapper)")
+
+      // Switching accent while the panel is open restyles it without reopening.
+      await setTheme('rgb(20, 120, 60)')
+      await waitFor(cdp, `getComputedStyle(${FRAME}.contentDocument.querySelector('#ee-export')).backgroundColor === 'rgb(20, 120, 60)'`, {
+        label: 'the open panel to pick up the new accent',
+        timeoutMs: 10000,
+      })
+
+      await cdp.evaluate(`document.getElementById('epub-test-theme').remove(); ${FRAME}.contentDocument.querySelector('#ee-close').click(); true`)
+      await waitFor(cdp, `${FRAME}.offsetParent === null`, { label: 'the panel to close', timeoutMs: 10000 })
     },
   },
 ]

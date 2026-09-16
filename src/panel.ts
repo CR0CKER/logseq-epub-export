@@ -24,6 +24,8 @@ export interface PanelHandlers {
 
 const STYLE = `
 #app { font-family: var(--ls-font-family, system-ui, sans-serif); }
+/* Buttons don't inherit fonts by default: they rendered in Arial under a themed card. */
+button { font: inherit; }
 .ee-overlay { position: fixed; inset: 0; background: rgba(0,0,0,.35);
   display: flex; align-items: center; justify-content: center; }
 .ee-card { width: 440px; max-width: 92vw; background: var(--ls-primary-background-color, #fff);
