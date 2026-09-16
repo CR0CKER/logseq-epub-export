@@ -593,6 +593,40 @@ export const cases = [
     },
   },
   {
+    name: 'custom folder: a picker Logseq never answers (a protected folder) is explained, not silent',
+    async run({ cdp }) {
+      const hostText = (needle) => `document.body.innerText.includes(${JSON.stringify(needle)})`
+      await cdp.evaluate(`${PLUGIN}.settings.set('destinationMode', 'custom-folder'); ${PLUGIN}.settings.set('rememberFolder', false); true`)
+      // Electron, for a blocklisted folder such as ~/Downloads, waits for a
+      // main-process answer Logseq never gives: the promise never settles.
+      await cdp.evaluate(`(() => {
+        const w = ${FRAME}.contentWindow
+        w.showDirectoryPicker = () => new Promise((resolve) => { w.__releasePicker = () => resolve(null) })
+        return true
+      })()`)
+      await realClick(cdp, TOOLBAR_BUTTON)
+      await waitFor(cdp, hostText('rather than the folder itself'), { label: 'the hint about protected folders when the picker opens', timeoutMs: 15000 })
+      // Error notifications stay on screen, so count them: each click must add one.
+      const stuckCount = `document.body.innerText.split('The folder picker is stuck').length - 1`
+      await realClick(cdp, TOOLBAR_BUTTON)
+      await waitFor(cdp, `${stuckCount} >= 1`, { label: 'the stuck-picker explanation on the next click', timeoutMs: 15000 })
+      const before = await cdp.evaluate(stuckCount)
+
+      // After a Logseq restart the plugin forgets its own flag, but Chromium's
+      // picker is still stuck and says "File picker already active".
+      await cdp.evaluate(`(() => {
+        const w = ${FRAME}.contentWindow
+        w.__releasePicker()
+        w.showDirectoryPicker = async () => { throw new w.DOMException("Failed to execute 'showDirectoryPicker' on 'Window': File picker already active.", 'NotAllowedError') }
+        return true
+      })()`)
+      await realClick(cdp, TOOLBAR_BUTTON)
+      await waitFor(cdp, `${stuckCount} > ${before}`, { label: 'the explanation for "File picker already active"', timeoutMs: 15000 })
+
+      await cdp.evaluate(`${PLUGIN}.settings.set('destinationMode', 'graph-assets'); ${PLUGIN}.settings.set('rememberFolder', true); true`)
+    },
+  },
+  {
     name: "the panel follows the active theme: background, font (buttons too) and accent, live",
     async run({ cdp }) {
       // A stand-in theme that works the way Adwaita and Logseq's accent picker

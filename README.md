@@ -230,6 +230,15 @@ profile the demo graph is not a real graph. Open or create a graph first.
 DB graphs live under `~/logseq/graphs/<graph name>/`. See
 [Settings](#settings) for the exact folder.
 
+**Nothing happens after choosing a folder, or "The folder picker is stuck" /
+"File picker already active".** You chose a folder Logseq cannot open: the root
+of **Downloads**, **Documents** or **Desktop**, or your **home folder** itself
+(Chromium protects these). For such a folder Electron waits for Logseq to decide
+whether to allow it, and Logseq never answers, so the picker stays stuck until
+Logseq restarts. **Restart Logseq, then choose a folder *inside* one of them**,
+e.g. `Downloads/EPUB`. (Checked in Electron 43.4.1's source; the plugin cannot
+answer on Logseq's behalf.)
+
 **An image shows as `[image: …]` instead of the picture.** The file could not be
 read or decoded: it is missing from `assets/`, is not an image (e.g. a PDF), or
 is in a format Logseq's Chromium can't decode (e.g. HEIC). The panel log counts

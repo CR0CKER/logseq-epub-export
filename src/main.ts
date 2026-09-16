@@ -131,6 +131,23 @@ async function writeToFolder(handle: any, name: string, bytes: ArrayBuffer): Pro
 class NeedsClick extends Error {}
 
 /**
+ * Why a picker can hang: after a folder is chosen, Electron checks it against
+ * Chromium's blocklist of sensitive folders (the home folder, and the root of
+ * Downloads, Desktop, Documents, …). For a blocked folder it does not reject;
+ * it emits the session event `file-system-access-restricted` and waits for the
+ * app's answer (Electron 43.4.1, file_system_access_permission_context.cc).
+ * Logseq registers no listener (checked: the OG build and 0.10.15), so the
+ * request never settles and the next one fails "File picker already active".
+ * A plugin cannot answer that main-process event, so explain it instead.
+ */
+const STUCK_PICKER_MESSAGE =
+  'The folder picker is stuck: Logseq cannot open the folder chosen last time ' +
+  '(folders such as Downloads, Documents, Desktop or your home folder are ' +
+  'protected). Restart Logseq, then choose a folder inside one of them, e.g. ' +
+  'Downloads/EPUB.'
+let pickerPending = false
+
+/**
  * Show the folder picker. Null if the user cancels.
  *
  * Chromium opens it only with user activation in this frame. A click on the
@@ -142,9 +159,33 @@ class NeedsClick extends Error {}
 async function pickFolder(): Promise<any | null> {
   const picker = (window as any).showDirectoryPicker
   if (typeof picker !== 'function') throw new Error('This Logseq build cannot pick a folder. Use the "graph-assets" destination instead.')
+  if (pickerPending) throw new Error(STUCK_PICKER_MESSAGE)
+  let request: Promise<any>
   try {
-    return await picker({ id: 'logseq-epub-export', mode: 'readwrite' })
+    // Called before anything is awaited: the click's activation is still live.
+    request = picker({ id: 'logseq-epub-export', mode: 'readwrite' })
   } catch (e: any) {
+    request = Promise.reject(e)
+  }
+  pickerPending = true
+  try {
+    // Only when the dialog really opened: a picker refused for lack of a click
+    // settles at once, and the panel takes over without this hint.
+    const settledAtOnce = await Promise.race([
+      request.then(() => true, () => true),
+      new Promise<boolean>((r) => setTimeout(() => r(false), 150)),
+    ])
+    if (!settledAtOnce) {
+      void logseq.UI.showMsg(
+        'Choose the folder for the EPUB. Pick a folder inside Downloads, Documents or ' +
+          'Desktop rather than the folder itself: Logseq cannot open those.',
+        'info',
+        { timeout: 8000 },
+      )
+    }
+    return await request
+  } catch (e: any) {
+    if (/already active/i.test(String(e?.message))) throw new Error(STUCK_PICKER_MESSAGE)
     if (e?.name === 'AbortError') {
       // Also what Chromium reports when it refuses the chosen folder (the home
       // folder itself, system folders), so say both, never just go quiet.
@@ -160,6 +201,8 @@ async function pickFolder(): Promise<any | null> {
     }
     if (e?.name === 'SecurityError') throw new NeedsClick(e.message)
     throw e
+  } finally {
+    pickerPending = false
   }
 }
 

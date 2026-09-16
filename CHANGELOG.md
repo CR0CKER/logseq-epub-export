@@ -52,6 +52,13 @@ First public release.
   resolve, and their labels are escaped, so the chapter stays well-formed XHTML.
 - `#[[multi word]]` tags render as one tag link instead of a page link with a
   stray `#`.
+- Choosing a protected folder (the root of Downloads, Documents or Desktop, or
+  the home folder) no longer fails silently. Electron waits for Logseq to allow
+  such a folder and Logseq never answers, so the picker hung and later exports
+  failed with "File picker already active". The picker now says to choose a
+  folder inside one of those, and a stuck picker is explained (restart Logseq,
+  then pick a subfolder). An export also shows progress, and a picker that
+  returns no folder says so.
 
 ### Security
 
