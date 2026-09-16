@@ -9,7 +9,7 @@
  * Adapted from the logseq-adwaita-theme live suite (tests/lib/scratch.mjs).
  */
 import { spawn, execFileSync } from 'node:child_process'
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync, readFileSync } from 'node:fs'
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync, readFileSync, cpSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, basename } from 'node:path'
 import { connect, waitFor } from './cdp.mjs'
@@ -21,7 +21,13 @@ function pickPort() {
   return 9600 + Math.floor(Math.random() * 300)
 }
 
-export async function launch(target, { pluginPath = REPO_ROOT, settings = {} } = {}) {
+/**
+ * @param install 'unpacked' loads the repo as Developer mode's "Load unpacked
+ *   plugin" does (listed in preferences.json `externals`); 'marketplace' copies
+ *   the built plugin into <dotRoot>/plugins/<id>/, where a marketplace or zip
+ *   install lives. The two can load the plugin iframe from different origins.
+ */
+export async function launch(target, { pluginPath = REPO_ROOT, settings = {}, install = 'unpacked' } = {}) {
   const root = mkdtempSync(join(tmpdir(), `epub-live-${target.id}-`))
   const home = join(root, 'home')
   const userData = join(root, 'user-data')
@@ -30,11 +36,17 @@ export async function launch(target, { pluginPath = REPO_ROOT, settings = {} } =
   mkdirSync(join(dot, 'settings'), { recursive: true })
   mkdirSync(userData, { recursive: true })
 
-  // Load the plugin unpacked straight from the repo, so the suite tests the
-  // working tree (its dist/ build) rather than a copy that can go stale.
+  // Unpacked: straight from the repo, so the suite tests the working tree (its
+  // dist/ build) rather than a copy that can go stale. Marketplace: a copy of
+  // that same build, in the installed-plugins folder.
+  if (install === 'marketplace') {
+    const dest = join(dot, 'plugins', PLUGIN_ID)
+    mkdirSync(dest, { recursive: true })
+    for (const f of ['package.json', 'icon.svg', 'dist']) cpSync(join(pluginPath, f), join(dest, f), { recursive: true })
+  }
   writeFileSync(
     join(dot, 'preferences.json'),
-    JSON.stringify({ theme: null, themes: { mode: 'light' }, externals: [pluginPath] }, null, 2),
+    JSON.stringify({ theme: null, themes: { mode: 'light' }, externals: install === 'marketplace' ? [] : [pluginPath] }, null, 2),
   )
   writeFileSync(join(dot, 'config/plugins.edn'), '{}\n')
   writeFileSync(join(dot, `settings/${PLUGIN_ID}.json`), JSON.stringify({ disabled: false, ...settings }, null, 2))

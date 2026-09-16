@@ -95,10 +95,10 @@ then **Load unpacked plugin** on this folder.
 - Click the **book-download icon** in the toolbar to export the active graph
   using your saved settings (genuinely one click).
 - Or run **`EPUB Export: export current graph now`** from the command palette.
-- **`EPUB Export: open panel / choose folder`** opens a small panel to pick a
-  custom export folder and watch progress.
-- **`EPUB Export: forget export folder (this graph)`** clears a remembered
-  custom folder.
+- **`EPUB Export: open panel`** opens a small panel to export, watch progress,
+  and change the custom export folder.
+- **`EPUB Export: forget export folder (this graph)`** clears the remembered
+  custom folder for the open graph only; the next export asks again.
 
 <sub>[↑ Back to contents](#contents)</sub>
 
@@ -106,13 +106,31 @@ then **Load unpacked plugin** on this folder.
 
 | Setting | Options | Notes |
 |---|---|---|
-| **Save destination** | `graph-assets` (default) · `custom-folder` | Graph-assets writes into the graph's `assets/storages/logseq-epub-export/` (see below for where that is). Custom-folder writes to a folder you pick once per graph, through the File System Access API. |
+| **Save destination** | `graph-assets` (default) · `custom-folder` | Graph-assets writes into the graph's `assets/storages/logseq-epub-export/` (see below for where that is). Custom-folder writes to a folder you choose: the first export opens a folder picker. |
+| **Remember export folder** | on (default) / off | On: the folder you choose is kept for each graph, so later exports go straight there. The description names the current graph's folder. Untick it to forget every stored folder; each export then asks for a folder until you tick it again. |
 | **On re-export** | `overwrite` (default) · `versioned` | Overwrite the same file, or keep history with a timestamped filename (`<graph> YYYY-MM-DD-HHmm.epub`). |
 | **Include journal pages** | on/off | Adds journals as their own TOC section. |
 | **Output filename** | string | Blank = use the graph name. |
 
-The custom export folder is remembered **per graph** (stored in IndexedDB, since
-File System Access handles can't live in plugin settings).
+### Choosing and changing the custom folder
+
+Logseq's plugin settings have no button or folder-picker field, so the folder is
+chosen during an export instead:
+
+1. Set **Save destination** to `custom-folder` and click the toolbar icon. A
+   folder picker opens; choose a folder, and the export is saved there.
+2. Later exports go straight to that folder (with **Remember export folder** on).
+3. To **change** it: untick **Remember export folder** (or run
+   **`EPUB Export: forget export folder (this graph)`**), and the next export
+   asks again. Or open the panel and click **Change folder…**.
+
+If an export can't open the picker by itself — it has to follow a click or key
+press — the panel opens with **Choose folder and export…** instead, which does
+both in one click.
+
+The folder is stored **per graph** in the plugin's IndexedDB (a folder handle
+can't live in plugin settings). This works the same whether the plugin was
+loaded unpacked or installed from a release zip.
 
 Where **graph-assets** lands:
 
@@ -263,7 +281,13 @@ indexes, backlinks, headings and nesting, properties and property queries,
 journals, built-in pages left out, embedded images (a 2000 px photo arriving as
 a 1264 px JPEG, a small transparent PNG kept byte-for-byte, a web image left a
 link; on 2.x the images are pasted in, as a user would), the icon glyph, the File System Access API,
-and the panel opening in the app's colours.
+the custom folder (the toolbar click opens the picker directly and later exports
+skip it; unticking **Remember export folder** forgets the folder and makes every
+export ask; an export without a click behind it falls back to the panel's
+**Choose folder and export…**), and the panel opening in the app's colours. The
+folder picker is replaced by one that behaves like Chromium's — refusing without
+user activation — and hands back a real folder from the app's private file
+system, so the export is read back from it.
 
 On 0.10.x a fresh profile has no graph, and it only opens a folder through the
 native dialog. The harness starts the app with `--inspect` and answers
@@ -280,8 +304,13 @@ It runs every build it finds, by default:
 
 ```sh
 npm run test:live -- --target=legacy,db    # the released builds only
+npm run test:live -- --install=marketplace # installed like a release zip, not unpacked
 LOGSEQ_LEGACY_BIN=/path/to/Logseq npm run test:live -- --target=legacy
 ```
+
+`--install=marketplace` copies the build into the profile's `plugins/` folder, the
+way a marketplace or release-zip install lives, instead of loading the repo
+unpacked. Both install types pass the same cases.
 
 A target whose binary is missing is skipped with a reason, never silently passed.
 Run it with the screen **unlocked**: a locked session stops Logseq rendering.

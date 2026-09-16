@@ -1,25 +1,40 @@
 import '@logseq/libs'
 import { SettingSchemaDesc } from '@logseq/libs/dist/LSPlugin'
-import { del as idbDel, get as idbGet, set as idbSet } from 'idb-keyval'
+import { del as idbDel, delMany as idbDelMany, get as idbGet, keys as idbKeys, set as idbSet } from 'idb-keyval'
 import { exportGraphToEpub } from './export'
 import { openPanel, Panel } from './panel'
 import { watchTheme } from './theme'
 import { graphDisplayName } from './entities'
 import pkg from '../package.json'
 
-const SETTINGS: SettingSchemaDesc[] = [
+/**
+ * The settings schema. Rebuilt when the export folder changes, so the
+ * "Remember export folder" description can name the folder in use.
+ */
+const settingsSchema = (folderName: string | null): SettingSchemaDesc[] => [
   {
     key: 'destinationMode',
     title: 'Save destination',
     description:
-      'Where the EPUB is written. "Graph assets" writes into this graph\'s ' +
+      'Where the EPUB is written. "graph-assets" writes into this graph\'s ' +
       'assets/storages folder (no prompt; if the graph syncs via Syncthing it ' +
-      'reaches your e-reader automatically). "Custom folder" writes to a folder ' +
-      'you pick once per graph (requires the dev/unpacked install).',
+      'reaches your e-reader automatically). "custom-folder" writes to a folder ' +
+      'you choose: the first export asks for it.',
     type: 'enum',
     enumChoices: ['graph-assets', 'custom-folder'],
     enumPicker: 'radio',
     default: 'graph-assets',
+  },
+  {
+    key: 'rememberFolder',
+    title: 'Remember export folder',
+    description:
+      'For "custom-folder": keep the folder you choose for each graph, so later ' +
+      'exports go straight there. Untick to forget the stored folders; every ' +
+      'export then asks for a folder, until you tick this again. ' +
+      `Current folder for this graph: ${folderName ?? 'not set'}.`,
+    type: 'boolean',
+    default: true,
   },
   {
     key: 'outputMode',
@@ -51,7 +66,9 @@ const SETTINGS: SettingSchemaDesc[] = [
 let panel: Panel | null = null
 let busy = false
 
-const dirKey = (graphUrl: string) => `logseq-epub-export:dir:${graphUrl}`
+const DIR_KEY_PREFIX = 'logseq-epub-export:dir:'
+const dirKey = (graphUrl: string) => `${DIR_KEY_PREFIX}${graphUrl}`
+const rememberFolder = () => logseq.settings?.rememberFolder !== false
 
 async function currentGraph(): Promise<{ name: string; url: string } | null> {
   try {
@@ -101,9 +118,7 @@ async function writeToGraphAssets(name: string, bytes: ArrayBuffer): Promise<str
   return `assets/storages/${logseq.baseInfo.id}/${name}`
 }
 
-async function writeToCustomFolder(graphUrl: string, name: string, bytes: ArrayBuffer): Promise<string> {
-  const handle = await idbGet(dirKey(graphUrl))
-  if (!handle) throw new Error('No export folder set. Open the panel and choose a folder.')
+async function writeToFolder(handle: any, name: string, bytes: ArrayBuffer): Promise<string> {
   if (!(await ensureRW(handle))) throw new Error('Write permission to the export folder was denied.')
   const fh = await handle.getFileHandle(name, { create: true })
   const writable = await fh.createWritable()
@@ -112,18 +127,77 @@ async function writeToCustomFolder(graphUrl: string, name: string, bytes: ArrayB
   return `${handle.name}/${name}`
 }
 
-async function runExport(): Promise<void> {
+/** Thrown when the folder picker needs a click this call did not come from. */
+class NeedsClick extends Error {}
+
+/**
+ * Show the folder picker. Null if the user cancels.
+ *
+ * Chromium opens it only with user activation in this frame. A click on the
+ * toolbar button or a command-palette pick provides that (same-origin frames
+ * share the activation; measured on 0.10.15, 2.0.1 and the OG build, with both
+ * unpacked and installed plugins), so an export can ask directly. Anything
+ * else throws NeedsClick, and the caller falls back to the panel's button.
+ */
+async function pickFolder(): Promise<any | null> {
+  const picker = (window as any).showDirectoryPicker
+  if (typeof picker !== 'function') throw new Error('This Logseq build cannot pick a folder. Use the "graph-assets" destination instead.')
+  try {
+    return await picker({ id: 'logseq-epub-export', mode: 'readwrite' })
+  } catch (e: any) {
+    if (e?.name === 'AbortError') return null
+    if (e?.name === 'SecurityError') throw new NeedsClick(e.message)
+    throw e
+  }
+}
+
+/** Keep a newly chosen folder for this graph, if the user wants it remembered. */
+async function adoptFolder(graphUrl: string, handle: any): Promise<void> {
+  panel?.setFolder(handle.name)
+  if (!rememberFolder()) return
+  await idbSet(dirKey(graphUrl), handle)
+  log(`Export folder set: ${handle.name}`)
+  await refreshSettingsSchema()
+}
+
+/**
+ * The folder to export into: the stored one when it is remembered and still
+ * writable, otherwise one the user picks now. Null when the user cancels or
+ * has to click in the panel first (it is opened for them).
+ */
+async function exportFolder(graph: { name: string; url: string }): Promise<any | null> {
+  const stored = rememberFolder() ? await idbGet(dirKey(graph.url)) : null
+  try {
+    // A stored folder whose permission lapsed (e.g. after a restart) only needs
+    // the small permission prompt, which the same activation allows.
+    if (stored && (await ensureRW(stored))) return stored
+    const picked = await pickFolder()
+    if (!picked) { log('Export cancelled: no folder chosen.'); return null }
+    await adoptFolder(graph.url, picked)
+    return picked
+  } catch (e) {
+    if (!(e instanceof NeedsClick)) throw e
+    await openPanelFor(graph, { pick: true })
+    return null
+  }
+}
+
+async function runExport(chosen?: any): Promise<void> {
   if (busy) { log('An export is already running.'); return }
   const graph = await currentGraph()
   if (!graph) { await logseq.UI.showMsg('Could not read the current graph.', 'error'); return }
 
   const destinationMode = (logseq.settings?.destinationMode as string) || 'graph-assets'
-
-  // Custom folder with nothing set yet → guide the user to the panel.
-  if (destinationMode === 'custom-folder' && !(await idbGet(dirKey(graph.url)))) {
-    await openPanelFor(graph)
-    panel?.log('Choose an export folder first, then click “Export now”.')
-    return
+  let folder: any = null
+  if (destinationMode === 'custom-folder') {
+    try {
+      // Ask before building the book: the click's activation does not last.
+      folder = chosen ?? (await exportFolder(graph))
+    } catch (e: any) {
+      await logseq.UI.showMsg(`EPUB export: ${e?.message ?? e}`, 'error')
+      return
+    }
+    if (!folder) return
   }
 
   busy = true
@@ -137,8 +211,8 @@ async function runExport(): Promise<void> {
     const { stats } = result
     log(`Built ${stats.pages} pages, ${stats.tags} tags, ${stats.journals} journals, ${stats.images} images.`)
     if (stats.imagesFailed) log(`${stats.imagesFailed} image(s) could not be read and are shown as placeholders.`)
-    const where = destinationMode === 'custom-folder'
-      ? await writeToCustomFolder(graph.url, name, result.bytes)
+    const where = folder
+      ? await writeToFolder(folder, name, result.bytes)
       : await writeToGraphAssets(name, result.bytes)
     log(`Saved: ${where}`)
     await logseq.UI.showMsg(`EPUB exported: ${name}`, 'success')
@@ -152,45 +226,54 @@ async function runExport(): Promise<void> {
   }
 }
 
-/** Pick (and persist, per graph) a writable export folder. Must run in the
- *  plugin iframe from a real click — that's why it lives behind the panel. */
-async function chooseFolder(graphUrl: string): Promise<void> {
-  if (typeof (window as any).showDirectoryPicker !== 'function') {
-    await logseq.UI.showMsg(
-      'This Logseq build cannot pick a folder. Use the “Graph assets” destination instead.',
-      'warning',
-    )
-    return
-  }
+/** Re-register the settings schema so its description names the current folder. */
+async function refreshSettingsSchema(): Promise<void> {
+  let folderName: string | null = null
   try {
-    const handle = await (window as any).showDirectoryPicker({ mode: 'readwrite' })
-    if (!handle) return
-    await idbSet(dirKey(graphUrl), handle)
-    panel?.setFolder(handle.name)
-    log(`Export folder set: ${handle.name}`)
-  } catch (e: any) {
-    if (e?.name !== 'AbortError') {
-      console.warn('logseq-epub-export: showDirectoryPicker failed', e)
-      await logseq.UI.showMsg('Could not select a folder.', 'warning')
-    }
-  }
+    const graph = await currentGraph()
+    if (graph && rememberFolder()) folderName = (await idbGet(dirKey(graph.url)))?.name ?? null
+  } catch { /* no stored folder */ }
+  logseq.useSettingsSchema(settingsSchema(folderName))
 }
 
-async function openPanelFor(graph: { name: string; url: string }): Promise<void> {
+/** Forget every graph's stored folder. */
+async function forgetAllFolders(): Promise<void> {
+  const keys = (await idbKeys()).filter((k) => String(k).startsWith(DIR_KEY_PREFIX))
+  await idbDelMany(keys)
+  panel?.setFolder(null)
+  await refreshSettingsSchema()
+}
+
+async function openPanelFor(graph: { name: string; url: string }, { pick = false } = {}): Promise<void> {
   const destinationMode = (logseq.settings?.destinationMode as string) || 'graph-assets'
-  let folderName: string | null = null
-  if (destinationMode === 'custom-folder') {
-    const handle = await idbGet(dirKey(graph.url))
-    folderName = handle?.name ?? null
-  }
+  const custom = destinationMode === 'custom-folder'
+  const stored = custom && rememberFolder() ? await idbGet(dirKey(graph.url)) : null
   panel = await openPanel({
     graphName: graph.name,
     version: pkg.version,
-    destinationMode,
-    folderName,
-    onChooseFolder: () => chooseFolder(graph.url),
+    mode: pick ? 'pick' : 'export',
+    folder: !custom ? null : rememberFolder() ? { name: stored?.name ?? null } : { name: null, askEachTime: true },
+    onPickAndExport: async () => {
+      try {
+        const picked = await pickFolder()
+        if (!picked) return
+        await adoptFolder(graph.url, picked)
+        await runExport(picked)
+      } catch (e: any) {
+        log(`Could not choose a folder: ${e?.message ?? e}`)
+      }
+    },
+    onChangeFolder: async () => {
+      try {
+        const picked = await pickFolder()
+        if (picked) await adoptFolder(graph.url, picked)
+      } catch (e: any) {
+        log(`Could not choose a folder: ${e?.message ?? e}`)
+      }
+    },
     onExport: () => runExport(),
   })
+  if (pick) log('Choose the folder to save the EPUB in.')
 }
 
 async function openPanel_(): Promise<void> {
@@ -201,7 +284,13 @@ async function openPanel_(): Promise<void> {
 
 function bootstrap() {
   console.log('logseq-epub-export: loaded (v' + pkg.version + ')')
-  logseq.useSettingsSchema(SETTINGS)
+  logseq.useSettingsSchema(settingsSchema(null))
+  void refreshSettingsSchema()
+  logseq.onSettingsChanged((next: any, prev: any) => {
+    if (prev?.rememberFolder !== false && next?.rememberFolder === false) void forgetAllFolders()
+    else if (next?.rememberFolder !== prev?.rememberFolder) void refreshSettingsSchema()
+  })
+  logseq.App.onCurrentGraphChanged(() => { void refreshSettingsSchema() })
   watchTheme()
 
   logseq.provideModel({
@@ -224,14 +313,14 @@ function bootstrap() {
     () => { void runExport() },
   )
   logseq.App.registerCommandPalette(
-    { key: 'logseq-epub-export-panel', label: 'EPUB Export: open panel / choose folder' },
+    { key: 'logseq-epub-export-panel', label: 'EPUB Export: open panel' },
     () => { void openPanel_() },
   )
   logseq.App.registerCommandPalette(
     { key: 'logseq-epub-export-forget-folder', label: 'EPUB Export: forget export folder (this graph)' },
     async () => {
       const g = await currentGraph()
-      if (g) { await idbDel(dirKey(g.url)); panel?.setFolder(null) }
+      if (g) { await idbDel(dirKey(g.url)); panel?.setFolder(null); await refreshSettingsSchema() }
       await logseq.UI.showMsg('EPUB Export: export folder forgotten for this graph.', 'success')
     },
   )

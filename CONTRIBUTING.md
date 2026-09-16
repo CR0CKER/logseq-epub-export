@@ -10,7 +10,8 @@ it's built and how to test it. These are the conventions for changing it.
     entities through `src/entities.ts`, and add a row to its table (with a
     fixture in `tests/entities.ts`) when you find a new difference.
   - `npm run test:live` runs 0.10.15, 2.0.1 and a local Logseq OG build, each
-    when present; see README → Tests for the binary paths and overrides.
+    when present; see README → Tests for the binary paths and overrides. Before
+    a release, also run it with `--install=marketplace`.
 - **Test first, and see it fail.** An offline test in `tests/` for anything
   that can be checked without Logseq, and a live case in `tests/live/cases.mjs`
   for anything that depends on what a real build returns or renders.

@@ -19,6 +19,10 @@ import { resolveTargets } from '../lib/targets.mjs'
 import { launch, teardown } from '../lib/scratch.mjs'
 import { cases } from './cases.mjs'
 
+// --install=marketplace installs the built plugin the way a marketplace or
+// release-zip install does, instead of loading the repo unpacked.
+const install = process.argv.find((a) => a.startsWith('--install='))?.slice('--install='.length) ?? 'unpacked'
+
 const requested = process.argv
   .slice(2)
   .filter((a) => a.startsWith('--target='))
@@ -43,9 +47,9 @@ for (const target of resolveTargets(requested)) {
 
   let session
   try {
-    session = await launch(target)
+    session = await launch(target, { install })
     const version = await session.cdp.evaluate(`(async () => (await logseq.api.get_app_info?.())?.version ?? 'unknown')()`)
-    console.log(`  ${dim(`version ${version}`)}`)
+    console.log(`  ${dim(`version ${version}, ${install} install`)}`)
     const ctx = {}
     for (const c of cases) {
       try {

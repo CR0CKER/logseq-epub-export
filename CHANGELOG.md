@@ -23,8 +23,13 @@ First public release.
   and unreadable images keep a labelled placeholder.
 - An auto-generated, e-ink-friendly cover, written as an opaque JPEG and
   declared for EPUB 3, EPUB 2 and Calibre/ADE readers.
-- Settings: save to the graph's assets or a custom folder (remembered per
-  graph), overwrite or versioned filenames, journals on/off, output filename.
+- Settings: save to the graph's assets or a custom folder, overwrite or
+  versioned filenames, journals on/off, output filename.
+- Custom export folder: the first export opens a folder picker and saves there;
+  **Remember export folder** (on by default) keeps it per graph, and unticking it
+  forgets the stored folders so each export asks again. The panel offers
+  **Change folder…**, and **Choose folder and export…** when an export can't open
+  the picker itself. Works for unpacked and installed plugins alike.
 - A panel that follows the app's light/dark theme, and command palette entries.
 - **Logseq 2.x DB graph support.** 2.x returns links as `[[uuid]]`, lowercased
   page names, headings as a property and namespaced page properties; the

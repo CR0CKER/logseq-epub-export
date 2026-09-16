@@ -38,6 +38,91 @@ async function realClick(cdp, selector) {
   }
 }
 
+const FRAME = `document.querySelector('iframe#${PLUGIN_ID}_iframe')`
+const PLUGIN = `LSPluginCore.registeredPlugins.get(${JSON.stringify(PLUGIN_ID)})`
+
+/** A real pointer click on an element inside the plugin's iframe. */
+async function realClickInPlugin(cdp, selector) {
+  const rect = await cdp.evaluate(`(() => {
+    const f = ${FRAME}
+    const e = f?.contentDocument?.querySelector(${JSON.stringify(selector)})
+    if (!e) return null
+    const fb = f.getBoundingClientRect(), b = e.getBoundingClientRect()
+    return JSON.stringify([fb.left + b.left + b.width / 2, fb.top + b.top + b.height / 2, b.width, b.height])
+  })()`)
+  assert.ok(rect, `nothing in the plugin frame matches ${selector}`)
+  const [x, y, w, h] = JSON.parse(rect)
+  assert.ok(w > 0 && h > 0, `${selector} in the plugin frame has no size`)
+  for (const type of ['mousePressed', 'mouseReleased']) {
+    await cdp.call('Input.dispatchMouseEvent', { type, x, y, button: 'left', clickCount: 1 })
+  }
+}
+
+/**
+ * Replace the folder picker, which needs a native dialog, with one that acts
+ * like Chromium's: without user activation in the frame it throws the same
+ * SecurityError; with it, it returns a real folder handle from the frame's
+ * private file system, which the plugin stores and writes like a picked one.
+ * Every call records whether activation was there.
+ */
+async function stubFolderPicker(cdp, folder) {
+  await cdp.evaluate(`(() => {
+    const w = ${FRAME}.contentWindow
+    w.__pickerCalls = []
+    w.showDirectoryPicker = async () => {
+      const active = w.navigator.userActivation.isActive
+      w.__pickerCalls.push(active)
+      if (!active) throw new w.DOMException('Must be handling a user gesture to show a file picker.', 'SecurityError')
+      return (await w.navigator.storage.getDirectory()).getDirectoryHandle(${JSON.stringify(folder)}, { create: true })
+    }
+    return true
+  })()`)
+}
+
+const pickerCalls = async (cdp) => JSON.parse(await cdp.evaluate(`JSON.stringify(${FRAME}.contentWindow.__pickerCalls)`))
+
+/** { size, lastModified } of a file in the stand-in folder, or null. */
+async function folderFile(cdp, folder, name) {
+  return JSON.parse(await cdp.evaluate(`(async () => {
+    try {
+      const w = ${FRAME}.contentWindow
+      const dir = await (await w.navigator.storage.getDirectory()).getDirectoryHandle(${JSON.stringify(folder)})
+      const f = await (await dir.getFileHandle(${JSON.stringify(name)})).getFile()
+      const head = new Uint8Array(await f.slice(30, 38).arrayBuffer())
+      return JSON.stringify({ size: f.size, lastModified: f.lastModified, entry: String.fromCharCode(...head) })
+    } catch { return 'null' }
+  })()`))
+}
+
+/** Wait until the export writes `name` into the folder after `since` (ms). */
+async function waitForFolderExport(cdp, folder, name, since) {
+  const deadline = Date.now() + 60000
+  while (Date.now() < deadline) {
+    const f = await folderFile(cdp, folder, name)
+    if (f && f.lastModified > since && f.size > 0) {
+      await new Promise((r) => setTimeout(r, 800))
+      const again = await folderFile(cdp, folder, name)
+      if (again.size === f.size) return again
+    }
+    await new Promise((r) => setTimeout(r, 400))
+  }
+  throw new Error(`${name} was not written into the "${folder}" folder within 60s`)
+}
+
+/** Whether the plugin has a folder stored for this graph (its IndexedDB). */
+async function storedFolder(cdp, graphUrl) {
+  return cdp.evaluate(`(async () => {
+    const w = ${FRAME}.contentWindow
+    const db = await new Promise((res, rej) => { const r = w.indexedDB.open('keyval-store'); r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error) })
+    if (!db.objectStoreNames.contains('keyval')) return null
+    const v = await new Promise((res) => { const r = db.transaction('keyval').objectStore('keyval').get(${JSON.stringify(`logseq-epub-export:dir:${graphUrl}`)}); r.onsuccess = () => res(r.result) })
+    db.close()
+    return v?.name ?? null
+  })()`)
+}
+
+const panelVisible = (cdp) => cdp.evaluate(`${FRAME}.offsetParent !== null`)
+
 /** Chapter lookups over the unzipped book. */
 function bookIndex(files) {
   const chapters = Object.entries(files).filter(([n]) => n.endsWith('.xhtml') && !/\/(nav|cover)\.xhtml$/.test(n))
@@ -361,6 +446,107 @@ export const cases = [
       // pick itself stays manual; this checks the API is there to call.
       const has = await cdp.evaluate(`typeof document.querySelector('iframe#${PLUGIN_ID}_iframe')?.contentWindow?.showDirectoryPicker`)
       assert.equal(has, 'function', 'showDirectoryPicker is missing in the plugin iframe')
+    },
+  },
+  {
+    name: 'custom folder: the first export asks for a folder right away, later ones go straight there',
+    async run({ cdp, ctx }) {
+      const book = `${ctx.expectedTitle}.epub`
+      await cdp.evaluate(`${PLUGIN}.settings.set('destinationMode', 'custom-folder'); true`)
+      await stubFolderPicker(cdp, 'Kobo books')
+      assert.equal(await storedFolder(cdp, ctx.graph.url), null, 'a folder is already stored before the first export')
+
+      let since = Date.now() - 1000
+      await realClick(cdp, TOOLBAR_BUTTON)
+      const first = await waitForFolderExport(cdp, 'Kobo books', book, since)
+      assert.equal(first.entry, 'mimetype', 'the file in the chosen folder is not an EPUB')
+      assert.deepEqual(await pickerCalls(cdp), [true], 'the toolbar click did not open the picker with user activation')
+      assert.equal(await panelVisible(cdp), false, 'the panel opened although the picker could ask directly')
+      assert.equal(await storedFolder(cdp, ctx.graph.url), 'Kobo books', 'the chosen folder was not remembered')
+
+      since = first.lastModified
+      await realClick(cdp, TOOLBAR_BUTTON)
+      await waitForFolderExport(cdp, 'Kobo books', book, since)
+      assert.deepEqual(await pickerCalls(cdp), [true], 'the second export asked for a folder again')
+    },
+  },
+  {
+    name: 'settings: unticking "Remember export folder" forgets it, and every export then asks',
+    async run({ cdp, ctx }) {
+      const book = `${ctx.expectedTitle}.epub`
+      // Both builds render a boolean setting as a checkbox under [data-key]:
+      // 2.x a button[role=checkbox], 0.10.x an input[type=checkbox].
+      const item = `document.querySelector('[data-key="rememberFolder"]')`
+      await cdp.evaluate(`${FRAME}.contentWindow.logseq.showSettingsUI(); true`)
+      await waitFor(cdp, `Boolean(${item})`, { label: 'the plugin settings to show "Remember export folder"', timeoutMs: 15000 })
+      const text = await cdp.evaluate(`${item}.textContent`)
+      assert.match(text, /Remember export folder/)
+      assert.match(text, /Current folder for this graph: Kobo books/, 'the description does not name the remembered folder')
+
+      const box = JSON.parse(await cdp.evaluate(`(() => {
+        const b = ${item}.querySelector('button[role=checkbox], input[type=checkbox]')
+        b.scrollIntoView({ block: 'center' })
+        const r = b.getBoundingClientRect()
+        return JSON.stringify([r.left + r.width / 2, r.top + r.height / 2])
+      })()`))
+      for (const type of ['mousePressed', 'mouseReleased']) await cdp.call('Input.dispatchMouseEvent', { type, x: box[0], y: box[1], button: 'left', clickCount: 1 })
+      await waitFor(cdp, `${PLUGIN}.settings.get('rememberFolder') === false`, { label: 'the setting to untick', timeoutMs: 10000 })
+      // Close the dialog the way a user does.
+      const escape = async () => {
+        for (const type of ['keyDown', 'keyUp']) await cdp.call('Input.dispatchKeyEvent', { type, key: 'Escape', code: 'Escape', windowsVirtualKeyCode: 27 })
+        await waitFor(cdp, `!${item}`, { label: 'Escape to close the settings dialog', timeoutMs: 10000 })
+      }
+      await escape()
+      const deadline = Date.now() + 10000
+      while ((await storedFolder(cdp, ctx.graph.url)) !== null && Date.now() < deadline) await new Promise((r) => setTimeout(r, 300))
+      assert.equal(await storedFolder(cdp, ctx.graph.url), null, 'the stored folder was not forgotten')
+      // Logseq redraws a setting's description when the dialog opens, not while
+      // it is open, so check it the way a user would: reopen Settings.
+      await cdp.evaluate(`${FRAME}.contentWindow.logseq.showSettingsUI(); true`)
+      await waitFor(cdp, `(${item}?.textContent ?? '').includes('Current folder for this graph: not set')`, {
+        label: 'the reopened settings to say no folder is stored', timeoutMs: 10000,
+      })
+      await escape()
+
+      await stubFolderPicker(cdp, 'Other books')
+      let since = Date.now() - 1000
+      await realClick(cdp, TOOLBAR_BUTTON)
+      const first = await waitForFolderExport(cdp, 'Other books', book, since)
+      await realClick(cdp, TOOLBAR_BUTTON)
+      await waitForFolderExport(cdp, 'Other books', book, first.lastModified)
+      assert.deepEqual(await pickerCalls(cdp), [true, true], 'with Remember off, each export must ask for the folder')
+      assert.equal(await storedFolder(cdp, ctx.graph.url), null, 'a folder was stored although Remember is off')
+
+      await cdp.evaluate(`${PLUGIN}.settings.set('rememberFolder', true); true`)
+      await waitFor(cdp, `${PLUGIN}.settings.get('rememberFolder') === true`, { label: 'Remember to be back on', timeoutMs: 5000 })
+    },
+  },
+  {
+    name: 'custom folder: an export without a click behind it offers "Choose folder and export…" in the panel',
+    async run({ cdp, ctx }) {
+      const book = `${ctx.expectedTitle}.epub`
+      await stubFolderPicker(cdp, 'Panel books')
+      // Earlier clicks leave transient activation behind for a few seconds;
+      // wait it out, or the picker would still be allowed.
+      await waitFor(cdp, `!${FRAME}.contentWindow.navigator.userActivation.isActive && !navigator.userActivation.isActive`, {
+        label: 'user activation from earlier clicks to expire', timeoutMs: 20000,
+      })
+      await cdp.evaluate(`${PLUGIN}.settings.set('rememberFolder', true); true`)
+      // Invoke the export the way the host does, but from script: no user
+      // activation, so the picker refuses and the panel has to take over.
+      await cdp.evaluate(`${PLUGIN}.caller.callUserModel('runExport'); true`)
+      await waitFor(cdp, `Boolean(${FRAME}?.contentDocument?.querySelector('#ee-pick-export')) && ${FRAME}.offsetParent !== null`, {
+        label: 'the panel to offer "Choose folder and export…"', timeoutMs: 15000,
+      })
+      assert.deepEqual(await pickerCalls(cdp), [false], 'the export did not try the picker first')
+      const since = Date.now() - 1000
+      await realClickInPlugin(cdp, '#ee-pick-export')
+      const out = await waitForFolderExport(cdp, 'Panel books', book, since)
+      assert.equal(out.entry, 'mimetype')
+      assert.deepEqual(await pickerCalls(cdp), [false, true], 'the panel button did not open the picker with activation')
+      assert.equal(await storedFolder(cdp, ctx.graph.url), 'Panel books', 'the folder chosen in the panel was not remembered')
+      await cdp.evaluate(`${FRAME}.contentDocument.querySelector('#ee-close').click(); ${PLUGIN}.settings.set('destinationMode', 'graph-assets'); true`)
+      await waitFor(cdp, `${FRAME}.offsetParent === null`, { label: 'the panel to close', timeoutMs: 10000 })
     },
   },
   {
