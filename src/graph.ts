@@ -1,5 +1,15 @@
 import '@logseq/libs'
 import { SlugRegistry } from './slug'
+import {
+  DB_GRAPH_PREFIX,
+  blockText,
+  graphDisplayName,
+  headingProperty,
+  isBuiltInEntity,
+  isJournalPage,
+  normalizeDbProperties,
+  pageTitle,
+} from './entities'
 
 /** A single block, normalized from Logseq's BlockEntity tree. */
 export interface BlockNode {
@@ -79,24 +89,68 @@ function toTagList(value: any): string[] {
     .filter(Boolean)
 }
 
-function normalizeTree(blocks: any[]): BlockNode[] {
+function normalizeTree(blocks: any[], isDb: boolean): BlockNode[] {
   const out: BlockNode[] = []
   for (const b of blocks ?? []) {
-    const rawContent: string = b?.content ?? ''
-    const content = stripProperties(rawContent)
-    const children = normalizeTree(b?.children ?? [])
+    const rawContent = blockText(b)
+    // File graphs keep block properties as `key:: value` lines in the text;
+    // DB graphs keep them out of it, so there is nothing to strip there.
+    const text = isDb ? rawContent.trim() : stripProperties(rawContent)
+    const children = normalizeTree(b?.children ?? [], isDb)
     // Drop the page-properties pre-block and any block that became empty
     // after stripping properties and has no children.
-    if (!content && children.length === 0) continue
-    const hm = content.match(HEADING)
+    if (!text && children.length === 0) continue
+    const hm = text.match(HEADING)
+    const level = hm ? hm[1].length : headingProperty(b)
     out.push({
-      content,
+      // Headings from a property carry no `#` prefix; add one so the renderer
+      // has a single form to strip.
+      content: hm || !level ? text : `${'#'.repeat(level)} ${text}`,
       properties: b?.properties ?? {},
-      heading: hm ? hm[1].length : undefined,
+      heading: level,
       children,
     })
   }
   return out
+}
+
+/** Whether the open graph is a Logseq 2.x DB graph. */
+async function detectDbGraph(graphUrl: string | undefined): Promise<boolean> {
+  if (graphUrl?.startsWith(DB_GRAPH_PREFIX)) return true
+  try {
+    // Only 2.x hosts implement this; OG rejects the unknown method.
+    return Boolean(await (logseq.App as any).checkCurrentIsDbGraph())
+  } catch {
+    return false
+  }
+}
+
+/** DB-only lookups, fetched once per export. */
+interface DbContext {
+  propertyTitles: Map<string, string>
+  builtInTags: Set<string>
+}
+
+async function loadDbContext(): Promise<DbContext> {
+  const ctx: DbContext = { propertyTitles: new Map(), builtInTags: new Set() }
+  const [properties, tags] = await Promise.all([
+    (logseq.Editor as any).getAllProperties?.().catch(() => []) ?? [],
+    (logseq.Editor as any).getAllTags?.().catch(() => []) ?? [],
+  ])
+  for (const p of properties ?? []) {
+    const title = pageTitle(p)
+    if (p?.ident && title) {
+      const ident = String(p.ident)
+      ctx.propertyTitles.set(ident, title)
+      ctx.propertyTitles.set(ident.startsWith(':') ? ident : `:${ident}`, title)
+    }
+  }
+  for (const t of tags ?? []) {
+    if (!isBuiltInEntity(t) && !String(t?.ident ?? '').startsWith(':logseq.class/')) continue
+    const title = pageTitle(t)
+    if (title) ctx.builtInTags.add(title.toLowerCase())
+  }
+  return ctx
 }
 
 /** Scan a block's content for outgoing references, recording backlinks and
@@ -144,11 +198,13 @@ export async function collectGraph(
   onProgress?: (msg: string) => void,
 ): Promise<GraphModel> {
   const graph = await logseq.App.getCurrentGraph()
-  const graphName = graph?.name || 'Logseq graph'
+  const graphName = graphDisplayName(graph) || 'Logseq graph'
+  const isDb = await detectDbGraph(graph?.url)
+  const db = isDb ? await loadDbContext() : null
 
   const all = (await logseq.Editor.getAllPages()) ?? []
   // Real content pages only: exclude built-in/empty placeholder pages.
-  const candidates = all.filter((p: any) => p && p.name && !p['built-in?'])
+  const listed = all.filter((p: any) => p && p.name && !isBuiltInEntity(p))
 
   const slugs = new SlugRegistry()
   const model: GraphModel = {
@@ -164,26 +220,40 @@ export async function collectGraph(
   }
 
   let i = 0
-  for (const p of candidates) {
+  for (const summary of listed) {
     i++
-    if (onProgress && i % 25 === 0) onProgress(`Reading pages… ${i}/${candidates.length}`)
-    const name: string = p.originalName ?? p.name
+    if (onProgress && i % 25 === 0) onProgress(`Reading pages… ${i}/${listed.length}`)
+    // 2.x's getAllPages returns a summary without `journalDay` or the
+    // built-in flag; only the full entity carries them.
+    const p = db ? { ...summary, ...((await logseq.Editor.getPage(summary.uuid).catch(() => null)) ?? {}) } : summary
+    if (isBuiltInEntity(p)) continue
+    const name = pageTitle(p)
     let tree: BlockNode[] = []
     try {
       const raw = await logseq.Editor.getPageBlocksTree(p.name)
-      tree = normalizeTree(raw ?? [])
+      tree = normalizeTree(raw ?? [], isDb)
     } catch (e) {
       console.warn('logseq-epub-export: getPageBlocksTree failed for', name, e)
     }
     if (tree.length === 0) continue // skip empty/stub pages — no chapter
 
-    const isJournal = !!p['journal?']
+    let properties: Record<string, any> = p.properties ?? {}
+    if (db) {
+      try {
+        const raw = await (logseq.Editor as any).getPageProperties(p.uuid)
+        properties = normalizeDbProperties(raw, db.propertyTitles, db.builtInTags)
+      } catch (e) {
+        console.warn('logseq-epub-export: getPageProperties failed for', name, e)
+      }
+    }
+
+    const isJournal = isJournalPage(p)
     const page: GraphPage = {
       name,
       slug: slugs.slug(name, isJournal ? 'j' : 'p'),
       isJournal,
       journalDay: p.journalDay ?? 0,
-      properties: p.properties ?? {},
+      properties,
       tree,
     }
     if (isJournal) model.journals.push(page)

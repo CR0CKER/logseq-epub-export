@@ -4,6 +4,7 @@ import { del as idbDel, get as idbGet, set as idbSet } from 'idb-keyval'
 import { exportGraphToEpub } from './export'
 import { openPanel, Panel } from './panel'
 import { watchTheme } from './theme'
+import { graphDisplayName } from './entities'
 import pkg from '../package.json'
 
 const SETTINGS: SettingSchemaDesc[] = [
@@ -56,7 +57,7 @@ async function currentGraph(): Promise<{ name: string; url: string } | null> {
   try {
     const g = await logseq.App.getCurrentGraph()
     if (!g?.url) return null
-    return { name: g.name ?? g.url, url: g.url }
+    return { name: graphDisplayName(g) || 'graph', url: g.url }
   } catch (e) {
     console.warn('logseq-epub-export: getCurrentGraph failed', e)
     return null
