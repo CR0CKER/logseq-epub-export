@@ -5,12 +5,12 @@ it's built and how to test it. These are the conventions for changing it.
 
 ## Rules
 
-- **It must work on both Logseq OG (file graphs) and Logseq 2.x (DB graphs).**
+- **It must work on both Logseq 0.10.x (file graphs) and Logseq 2.x (DB graphs).**
   - The two builds return differently shaped data from the same API calls. Read
     entities through `src/entities.ts`, and add a row to its table (with a
     fixture in `tests/entities.ts`) when you find a new difference.
-  - `npm run test:live` runs both builds by default; see README → Tests for the
-    binary paths and overrides.
+  - `npm run test:live` runs 0.10.15, 2.0.1 and a local Logseq OG build, each
+    when present; see README → Tests for the binary paths and overrides.
 - **Test first, and see it fail.** An offline test in `tests/` for anything
   that can be checked without Logseq, and a live case in `tests/live/cases.mjs`
   for anything that depends on what a real build returns or renders.
@@ -27,7 +27,7 @@ it's built and how to test it. These are the conventions for changing it.
 
 ```sh
 npm run typecheck && npm test && npm audit && npm run build
-npm run test:live          # both builds; screen unlocked
+npm run test:live          # every build; screen unlocked
 ```
 
 ## Git

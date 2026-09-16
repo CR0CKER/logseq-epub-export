@@ -1,7 +1,7 @@
 /**
  * Unit tests for src/entities.ts: the OG / 2.x entity normalization.
  * Fixtures are trimmed copies of what each build's API returned, captured live
- * (Logseq OG 1.0.0, Logseq 2.0.1) — see the table in src/entities.ts.
+ * (Logseq 0.10.15 / an OG 1.0.0 build, Logseq 2.0.1) — see the table in src/entities.ts.
  */
 import {
   blockText,

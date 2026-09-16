@@ -26,8 +26,8 @@ First public release.
   plugin normalizes these (`src/entities.ts`), leaves Logseq's built-in
   property and class pages out, and titles the book with the graph's name
   rather than `logseq_db_<name>`.
-- A live test suite (`npm run test:live`) that drives real Logseq OG and
-  Logseq 2.x in isolated profiles, exports a seeded graph with one click and
+- A live test suite (`npm run test:live`) that drives real Logseq 0.10.15 and
+  Logseq 2.0.1 (plus a local Logseq OG build, when present) in isolated profiles, exports a seeded graph with one click and
   checks the resulting book. Offline tests (`npm test`) for the entity
   normalization and rendering run in CI.
 - CI (typecheck, offline tests, build, `npm audit`), a tag-driven release

@@ -88,7 +88,7 @@ export const cases = [
   {
     name: 'setup: a graph with the fixture content is open',
     async run({ cdp, session, target, ctx }) {
-      if (target.id === 'og') {
+      if (target.id !== 'db') {
         const dir = writeFileGraph(join(session.root, 'EPUB Live Test'))
         await openFileGraph(session, dir)
         ctx.expectedTitle = 'EPUB Live Test'

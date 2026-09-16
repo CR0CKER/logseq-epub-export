@@ -45,9 +45,13 @@ the book passed:
 
 | Logseq | Graph type | Status |
 |---|---|---|
-| **Logseq OG** 1.0.0 (the [`logseq/og`](https://github.com/logseq/og) continuation of the 0.10.x line) | file (Markdown) | verified: every live case passes; one reports itself skipped, because OG flags no page as built-in |
+| **Logseq 0.10.15** (last official file-graph release) | file (Markdown) | verified: every live case passes; one reports itself skipped, because 0.10.x flags no page as built-in |
 | **Logseq 2.0.1** (DB version) | DB | verified: every live case passes |
-| Logseq 0.10.x official builds (0.10.9–0.10.15) | file | expected to work: same plugin API and data shape as OG; not in the live suite |
+| Earlier 0.10.x releases | file | expected to work: same plugin API and data shape as 0.10.15; not in the live suite |
+
+The suite also runs a local, unreleased build of [`logseq/og`](https://github.com/logseq/og)
+(the community continuation of the file-graph line, on Electron 43) when one is
+present; it passes the same cases as 0.10.15.
 
 The two lines answer the same plugin API calls with differently shaped data —
 a DB graph stores links as `[[uuid]]`, keeps headings in a property and page
@@ -111,7 +115,7 @@ Where **graph-assets** lands:
 
 | Graph type | Folder |
 |---|---|
-| File graph (OG / 0.10.x) | `<your graph folder>/assets/storages/logseq-epub-export/` |
+| File graph (0.10.x) | `<your graph folder>/assets/storages/logseq-epub-export/` |
 | DB graph (2.x) | `~/logseq/graphs/<graph name>/assets/storages/logseq-epub-export/` |
 
 <sub>[↑ Back to contents](#contents)</sub>
@@ -177,7 +181,7 @@ latest export (it's the first page) — only the browser thumbnail is cached.
 Using **versioned** output (a new filename each time) side-steps the cache
 entirely.
 
-**"Could not read the current graph."** No graph is open — on a fresh Logseq OG
+**"Could not read the current graph."** No graph is open — on a fresh Logseq 0.10.x
 profile the demo graph is not a real graph. Open or create a graph first.
 
 **Can't find the EPUB after exporting a DB graph.** It is not next to your notes:
@@ -195,7 +199,7 @@ so it has no chapter. Empty pages are skipped on purpose.
 npm run typecheck      # tsc --noEmit
 npm test               # offline tests: entity normalization + render/EPUB smoke test
 npm run build          # production build to ./dist
-npm run test:live      # build, then drive real Logseq OG and 2.x (local only)
+npm run test:live      # build, then drive real Logseq 0.10.15 and 2.x (local only)
 npm run preview:cover  # build docs/cover-preview.js, then open docs/cover-preview.html
 ```
 
@@ -228,19 +232,22 @@ indexes, backlinks, headings and nesting, properties and property queries,
 journals, built-in pages left out, the icon glyph, the File System Access API,
 and the panel opening in the app's colours.
 
-On OG a fresh profile has no graph, and OG only opens a folder through the native
-dialog. The harness starts the app with `--inspect` and answers
+On 0.10.x a fresh profile has no graph, and it only opens a folder through the
+native dialog. The harness starts the app with `--inspect` and answers
 `dialog.showOpenDialog` in the main process with the seeded folder, then clicks
 "Choose a folder" — so the export runs against a real file graph.
 
-It runs both builds by default. OG is looked for at
-`~/.local/opt/logseq-og/Logseq-OG`, 2.x at `~/.local/opt/logseq-db-2.0.1/logseq`;
-override either:
+It runs every build it finds, by default:
+
+| Target | Build | Default binary | Override |
+|---|---|---|---|
+| `legacy` | Logseq 0.10.15, from the release's `Logseq-linux-arm64-0.10.15.zip` (check it against the release's `SHA256SUMS.txt` before extracting) | `~/.local/opt/logseq-0.10.15/Logseq` | `LOGSEQ_LEGACY_BIN` |
+| `db` | Logseq 2.0.1, from `Logseq-linux-arm64-2.0.1.zip` | `~/.local/opt/logseq-db-2.0.1/logseq` | `LOGSEQ_DB_BIN` |
+| `og` | a local build of `logseq/og` (optional) | `~/.local/opt/logseq-og/Logseq-OG` | `LOGSEQ_OG_BIN` |
 
 ```sh
-npm run test:live -- --target=og      # one build
-LOGSEQ_OG_BIN=/path/to/Logseq-OG npm run test:live
-LOGSEQ_DB_BIN=/path/to/logseq npm run test:live -- --target=db
+npm run test:live -- --target=legacy,db    # the released builds only
+LOGSEQ_LEGACY_BIN=/path/to/Logseq npm run test:live -- --target=legacy
 ```
 
 A target whose binary is missing is skipped with a reason, never silently passed.
@@ -256,7 +263,7 @@ Releases are tag-driven:
 1. Move `CHANGELOG.md` → `[Unreleased]` into a dated version section, and bump
    the version with `npm version <x.y.z> --no-git-tag-version` (keeps
    `package.json` and `package-lock.json` in step).
-2. Run every gate, including the live suite on both builds:
+2. Run every gate, including the live suite on 0.10.15 and 2.x:
    `npm run typecheck && npm test && npm audit && npm run test:live`.
 3. Merge, then tag `v<x.y.z>` on the default branch and push the tag. The
    *Release* workflow builds the plugin and attaches

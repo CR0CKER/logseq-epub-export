@@ -2,8 +2,9 @@
  * Normalize the entities Logseq's plugin API returns, so the rest of the
  * exporter sees one shape on both builds.
  *
- * Logseq OG (file graphs, the 0.10.x line) and Logseq 2.x (DB graphs) answer
- * the same API calls with different data. Measured on OG 1.0.0 and 2.0.1:
+ * Logseq 0.10.x (file graphs; also the logseq/og continuation) and Logseq 2.x
+ * (DB graphs) answer the same API calls with different data. Measured on
+ * 0.10.15, an OG 1.0.0 build and 2.0.1; the "OG" column is the file-graph shape:
  *
  * | | OG | 2.x |
  * |---|---|---|

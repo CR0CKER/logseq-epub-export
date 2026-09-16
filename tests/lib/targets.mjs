@@ -10,9 +10,21 @@ import { homedir } from 'node:os'
 import { join } from 'node:path'
 
 export const TARGETS = {
+  legacy: {
+    id: 'legacy',
+    label: 'Logseq 0.10.15 (official release, file graphs)',
+    // The last official file-graph release, and what most file-graph users
+    // still run. The default is the checksum-verified
+    // Logseq-linux-arm64-0.10.15.zip, extracted.
+    bin: process.env.LOGSEQ_LEGACY_BIN || join(homedir(), '.local/opt/logseq-0.10.15/Logseq'),
+    dotRoot: '.logseq',
+    flags: ['--enable-features=WaylandWindowDecorations', '--gtk-version=4'],
+  },
   og: {
     id: 'og',
-    label: 'Logseq OG (file graphs, 0.10.x line)',
+    // The maintainer's own, unreleased build of logseq/og (Electron 43). It
+    // tracks the same file-graph code as 0.10.x, but nobody else runs it.
+    label: 'Logseq OG (unreleased local build, file graphs)',
     bin: process.env.LOGSEQ_OG_BIN || join(homedir(), '.local/opt/logseq-og/Logseq-OG'),
     // Logseq's dot-root lives under $HOME and is NOT moved by --user-data-dir,
     // so every launch overrides HOME. OG uses its own name; official builds use
