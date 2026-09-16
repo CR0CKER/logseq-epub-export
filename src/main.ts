@@ -302,7 +302,7 @@ function bootstrap() {
   logseq.App.registerUIItem('toolbar', {
     key: 'logseq-epub-export',
     template: `
-      <a data-on-click="runExport" class="button" aria-label="Export graph to EPUB">
+      <a data-on-click="runExport" class="button" title="Export to epub">
         <i class="ti ti-book-download"></i>
       </a>
     `,
