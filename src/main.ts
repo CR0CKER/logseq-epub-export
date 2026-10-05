@@ -285,6 +285,7 @@ async function runExport(chosen?: any): Promise<void> {
     const { stats } = result
     log(`Built ${stats.pages} pages, ${stats.tags} tags, ${stats.journals} journals, ${stats.images} images.`)
     if (stats.imagesFailed) log(`${stats.imagesFailed} image(s) could not be read and are shown as placeholders.`)
+    if (result.imageFailure) log(`First failure: ${result.imageFailure}`)
     const where = folder
       ? await writeToFolder(folder, name, result.bytes)
       : await writeToGraphAssets(name, result.bytes)

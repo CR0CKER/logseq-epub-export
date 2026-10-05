@@ -6,6 +6,18 @@ follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- When images fail to load, the panel log names the first one, every address
+  tried and what each returned, so a report says where the read went wrong.
+
+### Fixed
+
+- Images are embedded on Windows again: the `file://` address the plugin reads
+  graph assets through was built from the raw Windows path
+  (`file://C%3A%5CUsers…`), so every image became a placeholder (#4). Drive
+  letters and UNC shares now give valid addresses.
+
 ### Security
 
 - DOMPurify (pulled in by `@logseq/libs`) raised to 3.4.16 for GHSA-p98j-92pf-mc4p, a
