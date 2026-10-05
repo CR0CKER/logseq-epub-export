@@ -6,6 +6,11 @@ follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Security
+
+- DOMPurify (pulled in by `@logseq/libs`) raised to 3.4.16 for GHSA-p98j-92pf-mc4p, a
+  low-severity DOM XSS in its `IN_PLACE` mode.
+
 ## [0.1.0] - 2026-09-16
 
 First public release.
