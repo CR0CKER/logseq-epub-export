@@ -1,5 +1,5 @@
 import '@logseq/libs'
-import { EmbeddedImage, encodingPlan, imageFileName, sniffImageType } from './assets'
+import { EmbeddedImage, assetFileUrl, encodingPlan, imageFileName, sniffImageType } from './assets'
 import { encodeCanvas } from './cover'
 
 export interface LoadedImages {
@@ -8,7 +8,15 @@ export interface LoadedImages {
   files: EmbeddedImage[]
   /** keys that could not be read or decoded; they render as placeholders. */
   failed: string[]
+  /**
+   * Why the first failed image failed: each URL tried and what it returned.
+   * One line is enough to tell a wrong path from a refused scheme, and it is
+   * what a bug report needs.
+   */
+  firstFailure?: string
 }
+
+type ReadResult = { bytes: Uint8Array } | { tried: string[] }
 
 /**
  * Read an asset's bytes from the plugin iframe.
@@ -18,22 +26,26 @@ export interface LoadedImages {
  * refuse `file://`; Logseq 0.10.15 loads plugins from `file://`, so there
  * `file://` works and `assets://` does not. Try one, then the other.
  */
-async function readAsset(key: string, graphPath: string | undefined): Promise<Uint8Array | null> {
+async function readAsset(key: string, graphPath: string | undefined): Promise<ReadResult> {
   const urls: string[] = []
+  const tried: string[] = []
   try {
     urls.push(await logseq.Assets.makeUrl(key))
-  } catch { /* not on this build */ }
-  if (graphPath) {
-    const encoded = `${graphPath.replace(/\/+$/, '')}/${key}`.split('/').map(encodeURIComponent).join('/')
-    urls.push(`file://${encoded}`)
+  } catch (e) {
+    tried.push(`makeUrl: ${String(e)}`)
   }
+  if (graphPath) urls.push(assetFileUrl(graphPath, key))
   for (const url of urls) {
     try {
       const res = await fetch(url)
-      if (res.ok) return new Uint8Array(await res.arrayBuffer())
-    } catch { /* try the next route */ }
+      if (res.ok) return { bytes: new Uint8Array(await res.arrayBuffer()) }
+      tried.push(`${url} → HTTP ${res.status}`)
+    } catch (e) {
+      tried.push(`${url} → ${String(e)}`)
+    }
   }
-  return null
+  if (!graphPath) tried.push('no graph path from getCurrentGraph')
+  return { tried }
 }
 
 async function decode(bytes: Uint8Array, mediaType: string): Promise<HTMLImageElement> {
@@ -104,13 +116,23 @@ export async function loadImages(keys: string[], onProgress?: (msg: string) => v
   for (const [i, key] of keys.entries()) {
     if (onProgress && i % 10 === 0) onProgress(`Adding images… ${i}/${keys.length}`)
     try {
-      const bytes = await readAsset(key, graphPath)
-      const file = bytes && (await prepare(bytes, result.files.length))
-      if (!file) { result.failed.push(key); continue }
+      const read = await readAsset(key, graphPath)
+      if (!('bytes' in read)) {
+        result.firstFailure ??= `${key}: ${read.tried.join('; ')}`
+        result.failed.push(key)
+        continue
+      }
+      const file = await prepare(read.bytes, result.files.length)
+      if (!file) {
+        result.firstFailure ??= `${key}: read, but not a decodable image`
+        result.failed.push(key)
+        continue
+      }
       result.files.push(file)
       result.hrefs.set(key, file.fileName)
     } catch (e) {
       console.warn('logseq-epub-export: could not embed image', key, e)
+      result.firstFailure ??= `${key}: ${String(e)}`
       result.failed.push(key)
     }
   }

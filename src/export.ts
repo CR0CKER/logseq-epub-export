@@ -15,6 +15,8 @@ export interface ExportResult {
   graphName: string
   bytes: ArrayBuffer
   stats: { pages: number; tags: number; journals: number; images: number; imagesFailed: number }
+  /** Why the first image failed to load, for the status log. */
+  imageFailure?: string
 }
 
 export interface ExportOptions {
@@ -75,5 +77,6 @@ export async function exportGraphToEpub(
       images: images.files.length,
       imagesFailed: images.failed.length,
     },
+    imageFailure: images.firstFailure,
   }
 }

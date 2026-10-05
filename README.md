@@ -194,8 +194,8 @@ file graph, and pasted or dropped images (image blocks) in a DB graph.
 - **Web images stay links.** `![alt](https://…)` becomes a link labelled
   `[image: alt]`: the export makes no network requests.
 - An image that can't be read or decoded (a missing file, a PDF, an unsupported
-  format) keeps a labelled `[image: …]` placeholder, and the panel log says how
-  many.
+  format) keeps a labelled `[image: …]` placeholder. The panel log says how
+  many, and why the first one failed.
 
 <sub>[↑ Back to contents](#contents)</sub>
 
@@ -268,7 +268,9 @@ answer on Logseq's behalf.)
 **An image shows as `[image: …]` instead of the picture.** The file could not be
 read or decoded: it is missing from `assets/`, is not an image (e.g. a PDF), or
 is in a format Logseq's Chromium can't decode (e.g. HEIC). The panel log counts
-these. Images linked from the web are always links, by design.
+these and ends with a **First failure:** line naming the file, each address the
+plugin tried, and what came back; please include that line when reporting a
+problem. Images linked from the web are always links, by design.
 
 **A link shows as grey text instead of a link.** The target page has no content,
 so it has no chapter. Empty pages are skipped on purpose.

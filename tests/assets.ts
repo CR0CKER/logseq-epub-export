@@ -4,7 +4,7 @@
  */
 import JSZip from 'jszip'
 import type { GraphModel, GraphPage } from '../src/graph'
-import { MAX_IMAGE_EDGE, assetKey, collectImageKeys, dbAssetKey, encodingPlan, imageFileName, sniffImageType } from '../src/assets'
+import { MAX_IMAGE_EDGE, assetFileUrl, assetKey, collectImageKeys, dbAssetKey, encodingPlan, imageFileName, sniffImageType } from '../src/assets'
 import { renderPageChapter } from '../src/render'
 import { buildEpub } from '../src/epub'
 
@@ -28,6 +28,17 @@ eq(assetKey('../pages/a.png'), null, 'only the assets folder')
 eq(assetKey('../assets/../../.ssh/id_ed25519'), null, 'no path traversal out of assets/')
 eq(assetKey('../assets/%2e%2e/secret.png'), null, 'no encoded path traversal either')
 eq(assetKey('../assets/'), null, 'a folder is not an image')
+
+console.log('assetFileUrl: the file:// fallback on every OS')
+// Expected values come from Node's url.pathToFileURL(path, { windows }), the
+// reference for how a path becomes a file URL. Before this, a Windows graph got
+// file://C%3A%5CUsers%5C… — every image failed to load (issue #4).
+eq(assetFileUrl('/home/u/My Graph', 'assets/ü #1.png'), 'file:///home/u/My%20Graph/assets/%C3%BC%20%231.png', 'Linux/macOS path, spaces and non-ASCII encoded')
+eq(assetFileUrl('/home/u/graph/', 'assets/a.png'), 'file:///home/u/graph/assets/a.png', 'a trailing slash on the graph folder')
+eq(assetFileUrl('C:\\Users\\Ana\\My Graph', 'assets/image_1.png'), 'file:///C:/Users/Ana/My%20Graph/assets/image_1.png', 'Windows drive path: forward slashes, drive letter unencoded')
+eq(assetFileUrl('C:\\Users\\张\\graph\\', 'assets/x%y.png'), 'file:///C:/Users/%E5%BC%A0/graph/assets/x%25y.png', 'Windows path with non-ASCII and a percent sign')
+eq(assetFileUrl('C:/Users/Ana/graph', 'assets/a.png'), 'file:///C:/Users/Ana/graph/assets/a.png', 'Windows drive path already using forward slashes')
+eq(assetFileUrl('\\\\nas\\share\\graph', 'assets/a b.png'), 'file://nas/share/graph/assets/a%20b.png', 'Windows UNC share: the server is the host')
 
 console.log('dbAssetKey: 2.x image blocks')
 eq(dbAssetKey({ uuid: '6aaa80cf-3610-4975-8585-263a7e042522', ':logseq.property.asset/type': 'png' }), 'assets/6aaa80cf-3610-4975-8585-263a7e042522.png', 'uuid + asset type')

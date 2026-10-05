@@ -49,6 +49,28 @@ export function assetKey(src: string): string | null {
   return parts.join('/')
 }
 
+/**
+ * The `file://` URL of a graph asset, from the graph folder as the host
+ * reports it. Windows hands back `C:\Users\…`: the separators become `/`,
+ * a drive letter needs the extra `/` (`file:///C:/…`) and must stay unencoded,
+ * and a UNC share (`\\server\share`) becomes the URL's host.
+ */
+export function assetFileUrl(graphPath: string, key: string): string {
+  let path = graphPath.replace(/\\/g, '/')
+  let host = ''
+  const unc = path.match(/^\/\/([^/]+)(\/.*)?$/)
+  if (unc) {
+    host = unc[1]
+    path = unc[2] ?? ''
+  }
+  path = `${path.replace(/\/+$/, '')}/${key}`
+  const drive = path.match(/^\/?([A-Za-z]:)(\/.*)$/)
+  const prefix = drive ? `/${drive[1]}` : ''
+  const rest = drive ? drive[2] : path
+  const encoded = rest.split('/').map(encodeURIComponent).join('/')
+  return `file://${encodeURIComponent(host)}${prefix}${encoded.startsWith('/') ? '' : '/'}${encoded}`
+}
+
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
 /** The asset key of a 2.x DB image block, or null for any other block. */
