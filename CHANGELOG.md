@@ -6,6 +6,8 @@ follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-10-05
+
 ### Added
 
 - Block references and embeds (#5). `((block))` and `[label](((block)))` link
@@ -104,5 +106,6 @@ First public release.
   `lodash-es` overridden to patched releases; build tooling on Vite 6.4.3 and
   esbuild 0.28.2. `npm audit` reports no known vulnerabilities (7 before).
 
-[Unreleased]: https://github.com/CR0CKER/logseq-epub-export/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/CR0CKER/logseq-epub-export/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/CR0CKER/logseq-epub-export/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/CR0CKER/logseq-epub-export/releases/tag/v0.1.0

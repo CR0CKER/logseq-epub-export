@@ -2,7 +2,7 @@
   "name": "logseq-epub-export",
   "author": "CR0CKER",
   "description": "Export a Logseq graph to a navigable EPUB for reading on e-ink devices (KOReader, etc.).",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "main": "dist/index.html",
   "effect": true,
   "homepage": "https://github.com/CR0CKER/logseq-epub-export",
