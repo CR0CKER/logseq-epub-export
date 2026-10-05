@@ -258,7 +258,7 @@ export const cases = [
       // racing OG's file parser.
       await waitFor(
         cdp,
-        `(async () => { for (const n of ${JSON.stringify([...EXPECT.pages, EXPECT.tag, EXPECT.specialPage, EXPECT.picturesPage])}) if (!(await logseq.api.get_page(n))) return false; return true })()`,
+        `(async () => { for (const n of ${JSON.stringify([...EXPECT.pages, EXPECT.tag, EXPECT.specialPage, EXPECT.picturesPage, EXPECT.refsPage])}) if (!(await logseq.api.get_page(n))) return false; return true })()`,
         { label: 'the fixture pages to be indexed', timeoutMs: 45000 },
       )
       // Built-in pages, as the host itself marks them, for the exclusion case.
@@ -367,6 +367,22 @@ export const cases = [
       assert.equal(h1(follow(adkar, 'Kotter 8-Step') ?? ''), 'Kotter 8-Step', '[[Kotter 8-Step]] does not link to its chapter')
       const leaks = chapters.filter(([, x]) => UUID.test(x.replace(/<[^>]*>/g, ''))).map(([n]) => n)
       assert.deepEqual(leaks, [], 'chapters with a UUID in their visible text')
+    },
+  },
+  {
+    name: 'block references link to the block, and embeds show the embedded page and block',
+    async run({ ctx }) {
+      const { byTitle } = needBook(ctx)
+      const x = byTitle(EXPECT.refsPage)
+      assert.ok(x, `no ${EXPECT.refsPage} chapter`)
+      assert.doesNotMatch(x.replace(/<[^>]*>/g, ''), /\(\(|\)\)|\{\{embed/, 'raw reference or embed syntax in the text')
+      const id = x.match(/<li id="(b-[0-9a-f-]{36})">Original block/)?.[1]
+      assert.ok(id, 'the referenced block has no anchor')
+      assert.match(x, new RegExp(`block reference: <a href="[^"#]+\\.xhtml#${id}">Original block</a>`), '((uuid)) is not a link to the block')
+      assert.match(x, new RegExp(`labelled: <a href="[^"#]+\\.xhtml#${id}">custom label</a>`), '[label](((uuid))) is not a labelled link to the block')
+      const special = EXPECT.specialPage.replace(/&/g, '&amp;')
+      assert.match(x, new RegExp(`<div class="embed"><p class="embed-title"><a href="[^"]+">${special}</a></p><ul><li>research &lt;and&gt; development`), 'the page embed does not show the page')
+      assert.match(x, /block embed<div class="embed"><ul><li>Original block/, 'the block embed does not show the block')
     },
   },
   {

@@ -125,6 +125,59 @@ assert(home.xhtml.includes('href="adkar.xhtml"') && home.xhtml.includes('href="t
   assert(plain.includes('Room C1 and C0 are free'), 'literal text like " C1 " is not mistaken for a code placeholder')
 }
 
+// Block references and embeds (#5). Both file and DB graphs hand the plugin
+// the raw `((uuid))` text, so the renderer resolves it from the block index.
+{
+  const U1 = '6512a0b1-0000-4000-8000-000000000001'
+  const U2 = '6512a0b1-0000-4000-8000-000000000002'
+  const U3 = '6512a0b1-0000-4000-8000-000000000003'
+  const original = { uuid: U1, content: 'Original **block** with [[ADKAR]]', properties: {}, children: [
+    { uuid: U3, content: 'its child', properties: {}, children: [] },
+  ] }
+  const loop = { uuid: U2, content: `loops: {{embed ((${U2}))}}`, properties: {}, children: [] }
+  const embedded = page('Embedded', 'embedded', {}, [
+    { content: 'content of the page', properties: {}, children: [] },
+    { content: '{{embed [[Embedded]]}}', properties: {}, children: [] },
+  ])
+  const refs = page('Refs', 'refs', {}, [
+    original,
+    { content: `block reference: ((${U1}))`, properties: {}, children: [] },
+    { content: `labelled: [custom label](((${U1})))`, properties: {}, children: [] },
+    { content: 'page embed', properties: {}, children: [
+      { content: '{{embed [[Embedded]]}}', properties: {}, children: [] },
+    ] },
+    { content: `block embed {{embed ((${U1}))}}`, properties: {}, children: [] },
+    { content: 'dangling ((6512a0b1-0000-4000-8000-0000000000ff))', properties: {}, children: [] },
+    loop,
+    { content: 'missing page {{embed [[Nowhere]]}}', properties: {}, children: [] },
+  ])
+  const m: GraphModel = {
+    ...model,
+    pages: [...model.pages, refs, embedded],
+    nameToSlug: new Map([...model.nameToSlug, ['refs', 'refs'], ['embedded', 'embedded']]),
+    blocks: new Map([
+      [U1, { slug: 'refs', node: original }],
+      [U2, { slug: 'refs', node: loop }],
+      [U3, { slug: 'refs', node: original.children[0] }],
+    ]),
+    refTargets: new Set([U1, U2]),
+  }
+  const x = renderPageChapter(refs, m).xhtml
+  assert(!x.includes('((') && !x.includes('))'), 'no raw (( )) left in the chapter')
+  assert(!x.includes('{{embed'), 'no raw {{embed}} left in the chapter')
+  assert(x.includes(`<li id="b-${U1}">`), 'a referenced block carries an anchor')
+  assert(x.split(`id="b-${U1}"`).length === 2, 'the anchor appears once, not again inside embeds')
+  assert(x.includes(`block reference: <a href="refs.xhtml#b-${U1}">Original block with ADKAR</a>`), '((uuid)) links to the block, labelled with its plain text')
+  assert(x.includes(`labelled: <a href="refs.xhtml#b-${U1}">custom label</a>`), '[label](((uuid))) keeps its own label')
+  assert(x.includes('<div class="embed"><p class="embed-title"><a href="embedded.xhtml">Embedded</a></p><ul><li>content of the page</li>'), 'a page embed shows the page title and its blocks')
+  assert(/block embed<div class="embed"><ul><li>Original <strong>block<\/strong>[^]*its child/.test(x), 'a block embed shows the block and its children')
+  assert(x.includes('dangling <span class="missing">[block reference]</span>'), 'a reference to an unknown block is muted text')
+  assert(x.includes(`<li>loops:<p><a href="refs.xhtml#b-${U2}">loops:</a></p></li>`), 'a block embedding itself renders once, then links instead of looping')
+  assert(x.includes('missing page<p><span class="missing">Nowhere</span></p>'), 'an embed of a page without a chapter is muted text')
+  const self = renderPageChapter(embedded, m).xhtml
+  assert(self.includes('<div class="embed">') && self.split('<div class="embed">').length === 2, 'a page embedding itself renders one level, then stops')
+}
+
 console.log('Packaging EPUB…')
 const chapters = [home, adkarCh, kotter && renderPageChapter(kotter, model), tagCh]
 // 1x1 PNG so we can exercise the cover plumbing without a canvas.

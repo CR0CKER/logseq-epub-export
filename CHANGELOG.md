@@ -8,6 +8,11 @@ follows [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- Block references and embeds (#5). `((block))` and `[label](((block)))` link
+  to the referenced block, labelled with its text or the given label;
+  `{{embed [[page]]}}` and `{{embed ((block))}}` show the page or block (with
+  its children) in place. Embeds nest up to three levels, and one that embeds
+  itself becomes a link.
 - When images fail to load, the panel log names the first one, every address
   tried and what each returned, so a report says where the read went wrong.
 

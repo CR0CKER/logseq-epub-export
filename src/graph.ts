@@ -1,6 +1,7 @@
 import '@logseq/libs'
 import { SlugRegistry } from './slug'
 import { dbAssetKey } from './assets'
+import { BLOCK_REF } from './refs'
 import {
   DB_GRAPH_PREFIX,
   blockText,
@@ -14,6 +15,8 @@ import {
 
 /** A single block, normalized from Logseq's BlockEntity tree. */
 export interface BlockNode {
+  /** The block's uuid, the target of `((uuid))` references and embeds. */
+  uuid?: string
   /** Raw block text with leading `key:: value` property lines removed. */
   content: string
   properties: Record<string, any>
@@ -57,6 +60,10 @@ export interface GraphModel {
   tagLabel: Map<string, string>
   /** asset key (`assets/…`) → its path in the book, for images that loaded. */
   images: Map<string, string>
+  /** lowercased block uuid → the block and the chapter it is in. */
+  blocks?: Map<string, { slug: string; node: BlockNode }>
+  /** lowercased uuids some block references or embeds; they get an anchor. */
+  refTargets?: Set<string>
 }
 
 const PROPERTY_LINE = /^[A-Za-z0-9_][A-Za-z0-9_-]*:: /
@@ -109,6 +116,7 @@ function normalizeTree(blocks: any[], isDb: boolean): BlockNode[] {
     const hm = text.match(HEADING)
     const level = hm ? hm[1].length : headingProperty(b)
     out.push({
+      uuid: typeof b?.uuid === 'string' ? b.uuid : undefined,
       // Headings from a property carry no `#` prefix; add one so the renderer
       // has a single form to strip.
       content: hm || !level ? text : `${'#'.repeat(level)} ${text}`,
@@ -200,6 +208,15 @@ function scanReferences(
   for (const c of node.children) scanReferences(c, page, model)
 }
 
+/** Record every block by uuid, and every uuid a block refers to. */
+function indexBlocks(nodes: BlockNode[], slug: string, model: GraphModel): void {
+  for (const node of nodes) {
+    if (node.uuid) model.blocks!.set(node.uuid.toLowerCase(), { slug, node })
+    for (const m of node.content.matchAll(BLOCK_REF)) model.refTargets!.add(m[1].toLowerCase())
+    indexBlocks(node.children, slug, model)
+  }
+}
+
 /** Read the active graph and build the full export model in one pass. */
 export async function collectGraph(
   onProgress?: (msg: string) => void,
@@ -225,6 +242,8 @@ export async function collectGraph(
     tagSlug: new Map(),
     tagLabel: new Map(),
     images: new Map(),
+    blocks: new Map(),
+    refTargets: new Set(),
   }
 
   let i = 0
@@ -288,6 +307,7 @@ export async function collectGraph(
   // and its slug is known.
   for (const page of [...model.pages, ...model.journals]) {
     for (const node of page.tree) scanReferences(node, page, model)
+    indexBlocks(page.tree, page.slug, model)
   }
 
   // Assign a chapter slug to every tag and register it as a link target.

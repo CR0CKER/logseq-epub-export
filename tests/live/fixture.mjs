@@ -4,7 +4,8 @@
  * Markdown import a scratch profile can drive). Both carry the same things the
  * exporter has to get right, so the cases can assert the same book on both:
  * original page-name casing, [[links]] and #tags, an alias, page properties, a
- * property query, a heading, a nested block and a journal.
+ * property query, a heading, a nested block, a journal, and block references
+ * and embeds.
  */
 import { mkdirSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
@@ -51,7 +52,11 @@ export const EXPECT = {
   specialPage: 'R&D',
   multiWordTag: 'change management',
   picturesPage: 'Pictures',
+  refsPage: 'References',
 }
+
+/** The file graph's referenced block; DB graphs make their own uuid. */
+const REF_UUID = '6512a0b1-0000-4000-8000-000000000001'
 
 /** Logseq OG: a file graph on disk. */
 export function writeFileGraph(dir) {
@@ -79,6 +84,18 @@ export function writeFileGraph(dir) {
   writeFileSync(join(dir, 'journals/2024_01_15.md'), '- journal entry about [[ADKAR]]\n')
   mkdirSync(join(dir, 'assets'), { recursive: true })
   for (const img of [IMAGES.photo, IMAGES.icon]) writeFileSync(join(dir, 'assets', img.file), img.bytes)
+  writeFileSync(
+    join(dir, `pages/${EXPECT.refsPage}.md`),
+    [
+      `- Original block\n  id:: ${REF_UUID}`,
+      `- block reference: ((${REF_UUID}))`,
+      `- labelled: [custom label](((${REF_UUID})))`,
+      '- page embed',
+      `\t- {{embed [[${EXPECT.specialPage}]]}}`,
+      `- block embed {{embed ((${REF_UUID}))}}`,
+      '',
+    ].join('\n'),
+  )
   writeFileSync(
     join(dir, 'pages/Pictures.md'),
     [
@@ -124,6 +141,15 @@ export async function seedDbGraph(cdp) {
     await a.append_block_in_page('Kotter 8-Step', 'Links back to [[adkar-model]] #framework')
     await a.append_block_in_page('Kotter 8-Step', '{{query (property type "framework")}}')
     await a.upsert_block_property(kotter.uuid, 'type', 'framework')
+
+    const refs = ${JSON.stringify(EXPECT.refsPage)}
+    await page(refs)
+    const original = await a.append_block_in_page(refs, 'Original block')
+    await a.append_block_in_page(refs, 'block reference: ((' + original.uuid + '))')
+    await a.append_block_in_page(refs, 'labelled: [custom label](((' + original.uuid + ')))')
+    const embedParent = await a.append_block_in_page(refs, 'page embed')
+    await a.insert_block(embedParent.uuid, ${JSON.stringify(`{{embed [[${EXPECT.specialPage}]]}}`)}, { sibling: false })
+    await a.append_block_in_page(refs, 'block embed {{embed ((' + original.uuid + '))}}')
 
     const journal = await a.create_journal_page('2024-01-15')
     await a.append_block_in_page(journal.uuid, 'journal entry about [[ADKAR]]')
