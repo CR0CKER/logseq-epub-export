@@ -12,6 +12,8 @@ The toolbar icon opens a small export panel; **Export now** builds an EPUB of th
   included (and a muted style for links to pages that don't exist).
 - **`#tags` as browsable index chapters** — each tag lists its member pages.
 - **"Linked References"** on every page — the backlinks, as working links.
+- **Block references and embeds** — `((block))` becomes a link to the block,
+  labelled with its text; `{{embed …}}` shows the embedded page or block in place.
 - **Your images, embedded** — pictures from the graph's `assets` folder are
   packed into the book, downscaled for e-ink (see [Images](#images)).
 - **`{{query (property type "X")}}` expansion** — index/MoC pages like
@@ -224,7 +226,10 @@ in the plugin and embedded in the EPUB. A few things worth knowing:
 - **Read-only snapshot** — re-run to refresh after editing the graph.
 - **Web images are not downloaded**, and other assets (PDFs, audio, video) are
   not embedded; see [Images](#images).
-- Block references / embeds (`((…))`, `{{embed …}}`) are not resolved.
+- An embed inside an embed is shown up to three levels deep; below that, and
+  for anything that embeds itself, it becomes a link. A reference to a block
+  on a page that isn't exported (an empty page, or a journal with journals
+  turned off) is grey text or a link that goes nowhere.
 - Only `(property <key> "<value>")` queries are expanded; other `{{query}}`
   forms render as a muted note. On DB graphs the key is matched against the
   property's **title**.

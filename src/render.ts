@@ -1,5 +1,6 @@
 import type { BlockNode, GraphModel, GraphPage } from './graph'
 import { MD_IMAGE, assetKey } from './assets'
+import { BLOCK_REF, EMBED, LABELLED_REF } from './refs'
 
 const lc = (s: string) => s.trim().toLowerCase()
 
@@ -51,36 +52,88 @@ export function renderInline(text: string, model: GraphModel): string {
     return hold(`<span class="asset">[image: ${label}]</span>`)
   })
 
-  // 4. Standard Markdown links [text](url).
+  // 4. Embeds and block references, before Markdown links: `[label](((uuid)))`
+  //    looks like one. An embed still here sits inside other text, so it
+  //    becomes a link; renderNodeList shows a block's embeds in full.
+  s = s.replace(EMBED, (_m, uuid, name) =>
+    hold(uuid ? blockRefAnchor(model, uuid) : pageLink(model, unescapeHtml(name), name)))
+  s = s.replace(LABELLED_REF, (_m, label, uuid) => hold(blockRefAnchor(model, uuid, label)))
+  s = s.replace(BLOCK_REF, (_m, uuid) => hold(blockRefAnchor(model, uuid)))
+
+  // 5. Standard Markdown links [text](url).
   s = s.replace(MD_LINK, (_m, label, url) => hold(`<a class="ext" href="${url}">${label}</a>`))
 
-  // 5. Bracketed tags before [[wikilinks]]: `#[[multi word]]` contains one.
+  // 6. Bracketed tags before [[wikilinks]]: `#[[multi word]]` contains one.
   //    Names here are escaped text, so look them up by the real name, or
   //    `[[R&D]]` never finds "R&D".
   s = s.replace(TAG_BRACKET, (_m, name) => hold(tagAnchor(model, unescapeHtml(name))))
 
-  // 6. Wikilinks [[Page]].
-  s = s.replace(WIKILINK, (_m, name) => {
-    const slug = model.nameToSlug.get(lc(unescapeHtml(name)))
-    return hold(slug ? `<a href="${slug}.xhtml">${name}</a>` : `<span class="missing">${name}</span>`)
-  })
+  // 7. Wikilinks [[Page]].
+  s = s.replace(WIKILINK, (_m, name) => hold(pageLink(model, unescapeHtml(name), name)))
 
-  // 7. Plain #tags.
+  // 8. Plain #tags.
   s = s.replace(TAG_PLAIN, (_m, pre, name) => `${pre}${hold(tagAnchor(model, unescapeHtml(name)))}`)
 
-  // 8. Bare URLs, before emphasis can reach into one.
+  // 9. Bare URLs, before emphasis can reach into one.
   s = s.replace(BARE_URL, (_m, pre, url) => `${pre}${hold(`<a class="ext" href="${url}">${url}</a>`)}`)
 
-  // 9. Emphasis.
+  // 10. Emphasis.
   s = s.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
   s = s.replace(/(^|[^*])\*([^*]+)\*/g, '$1<em>$2</em>')
   s = s.replace(/(^|[^_\w])_([^_]+)_/g, '$1<em>$2</em>')
 
-  // 10. Restore held fragments. A held Markdown-link label can itself hold
+  // 11. Restore held fragments. A held Markdown-link label can itself hold
   //     one, so repeat until none are left.
   const PLACEHOLDER = /(\d+)/g
   while (/\d+/.test(s)) s = s.replace(PLACEHOLDER, (_m, i) => done[Number(i)])
   return s
+}
+
+/** A page link, or grey text when the page has no chapter. `label` is escaped. */
+function pageLink(model: GraphModel, name: string, label: string): string {
+  const slug = model.nameToSlug.get(lc(name))
+  return slug ? `<a href="${slug}.xhtml">${label}</a>` : `<span class="missing">${label}</span>`
+}
+
+/** The anchor id a referenced block carries in its chapter. */
+const blockAnchor = (uuid: string) => `b-${uuid.toLowerCase()}`
+
+/**
+ * A block reference: a link to the block in its chapter, labelled with the
+ * block's text (or the reference's own `label`, already escaped).
+ */
+function blockRefAnchor(model: GraphModel, uuid: string, label?: string): string {
+  const target = model.blocks?.get(uuid.toLowerCase())
+  if (!target) return `<span class="missing">${label ?? '[block reference]'}</span>`
+  const text = label ?? (escapeHtml(plainText(target.node.content, model)) || '[block]')
+  return `<a href="${target.slug}.xhtml#${blockAnchor(uuid)}">${text}</a>`
+}
+
+/**
+ * A referenced block's first line as plain words, for a link label: links,
+ * images and emphasis reduced to their text, nested references to theirs,
+ * embeds dropped.
+ * Nesting stops after a few levels, so blocks that reference each other
+ * cannot loop.
+ */
+function plainText(content: string, model: GraphModel, depth = 0): string {
+  const refText = (uuid: string) => {
+    const t = depth < 3 ? model.blocks?.get(uuid.toLowerCase()) : undefined
+    return t ? plainText(t.node.content, model, depth + 1) : '…'
+  }
+  return content
+    .split('\n')[0]
+    .replace(/^#{1,6}\s+/, '')
+    .replace(EMBED, '') // an embed shows another block; it is not this one's text
+    .replace(LABELLED_REF, '$1')
+    .replace(BLOCK_REF, (_m, uuid) => refText(uuid))
+    .replace(MD_IMAGE, '$1')
+    .replace(MD_LINK, '$1')
+    .replace(TAG_BRACKET, '#$1')
+    .replace(WIKILINK, '$1')
+    .replace(/\*\*|==|~~|`/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
 }
 
 /** A tag link. `name` is the raw (unescaped) tag name. */
@@ -141,42 +194,85 @@ function renderQuery(content: string, model: GraphModel): string | null {
   return `<ul class="query-result">${items}</ul>`
 }
 
+/** Where a block list is being rendered: inside which embeds, if any. */
+interface ListContext {
+  /** `b:<uuid>` / `p:<page>` of the embeds being rendered, outermost first. */
+  embeds: string[]
+}
+
+const TOP: ListContext = { embeds: [] }
+
+/** Embeds inside embeds stop here and become links. */
+const MAX_EMBED_DEPTH = 3
+
 /** Render a list of sibling blocks, grouping plain bullets into <ul> runs and
  *  breaking out headings, tables and queries as their own elements. */
-function renderNodeList(nodes: BlockNode[], model: GraphModel): string {
+function renderNodeList(nodes: BlockNode[], model: GraphModel, ctx: ListContext = TOP): string {
   let html = ''
   let li: string[] = []
   const flush = () => {
     if (li.length) { html += `<ul>${li.join('')}</ul>`; li = [] }
   }
   for (const node of nodes) {
+    // A referenced block carries an anchor to land on. Not inside an embed:
+    // the copy would repeat the id, and the reference belongs to the original.
+    const id = !ctx.embeds.length && node.uuid && model.refTargets?.has(node.uuid.toLowerCase())
+      ? ` id="${blockAnchor(node.uuid)}"`
+      : ''
+    const kids = () => (node.children.length ? renderNodeList(node.children, model, ctx) : '')
     if (node.heading) {
       flush()
       const level = Math.min(node.heading + 1, 6) // page title is h1
       const headText = node.content.replace(/^#{1,6}\s+/, '')
-      html += `<h${level}>${renderInline(headText, model)}</h${level}>`
-      if (node.children.length) html += renderNodeList(node.children, model)
+      html += `<h${level}${id}>${renderInline(headText, model)}</h${level}>` + kids()
       continue
     }
     if (isTable(node.content)) {
       flush()
-      html += renderTable(node.content, model)
-      if (node.children.length) html += renderNodeList(node.children, model)
+      html += (id ? `<a${id}></a>` : '') + renderTable(node.content, model) + kids()
       continue
     }
     const q = renderQuery(node.content, model)
     if (q) {
       flush()
-      html += q
-      if (node.children.length) html += renderNodeList(node.children, model)
+      html += (id ? `<a${id}></a>` : '') + q + kids()
       continue
     }
-    const inner = node.image ? renderImageBlock(node.image, model) : renderInline(node.content, model)
-    const kids = node.children.length ? renderNodeList(node.children, model) : ''
-    li.push(`<li>${inner}${kids}</li>`)
+    let inner: string
+    if (node.image) {
+      inner = renderImageBlock(node.image, model)
+    } else {
+      const embeds = [...node.content.matchAll(EMBED)]
+      const text = embeds.length ? node.content.replace(EMBED, '').trim() : node.content
+      inner = (text ? renderInline(text, model) : '') +
+        embeds.map((m) => renderEmbed(m[1], m[2], model, ctx)).join('')
+    }
+    li.push(`<li${id}>${inner}${kids()}</li>`)
   }
   flush()
   return html
+}
+
+/**
+ * An embedded block (with its children) or page, shown in full inside the
+ * embedding block. An embed of something already being embedded, or nested
+ * too deep, is a link instead, so self-embeds cannot recurse.
+ */
+function renderEmbed(uuid: string | undefined, name: string | undefined, model: GraphModel, ctx: ListContext): string {
+  const key = uuid ? `b:${uuid.toLowerCase()}` : `p:${lc(name ?? '')}`
+  const asLink = () => `<p>${uuid ? blockRefAnchor(model, uuid) : pageLink(model, name ?? '', escapeHtml(name ?? ''))}</p>`
+  if (ctx.embeds.includes(key) || ctx.embeds.length >= MAX_EMBED_DEPTH) return asLink()
+  const inner: ListContext = { embeds: [...ctx.embeds, key] }
+  if (uuid) {
+    const target = model.blocks?.get(uuid.toLowerCase())
+    if (!target) return asLink()
+    return `<div class="embed">${renderNodeList([target.node], model, inner)}</div>`
+  }
+  const slug = model.nameToSlug.get(lc(name ?? ''))
+  const page = slug ? [...model.pages, ...model.journals].find((p) => p.slug === slug) : undefined
+  if (!page) return asLink()
+  return `<div class="embed"><p class="embed-title"><a href="${page.slug}.xhtml">${escapeHtml(page.name)}</a></p>` +
+    `${renderNodeList(page.tree, model, inner)}</div>`
 }
 
 /** A 2.x DB image block: the image, or its placeholder if it did not load. */
@@ -311,6 +407,8 @@ table.props th { background: #eee; }
 .backlinks { margin-top: 1.5em; border-top: 2px solid #999; padding-top: .5em; }
 .snip { color: #555; font-size: .9em; }
 .asset { color: #777; font-style: italic; }
+.embed { border-left: 2px solid #999; padding-left: .6em; margin: .3em 0; }
+.embed-title { font-weight: bold; margin: 0 0 .2em; }
 code { font-family: monospace; background: #eee; padding: 0 .2em; }
 img { max-width: 100%; height: auto; }
 `
